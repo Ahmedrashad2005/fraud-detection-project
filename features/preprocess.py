@@ -51,17 +51,15 @@ def drop_high_missing(df, threshold=0.90):
 
 def fill_missing_train(df):
     medians = {}
-    
-    # 1. التعامل مع الأعمدة الرقمية
-    numeric_cols = df.select_dtypes(include=np.number).columns
-    for col in numeric_cols:
-        med = df[col].median()
-        df[col] = df[col].fillna(med)
-        medians[col] = med
 
-    # 2. التعامل مع الأعمدة النصية (الفئات)
-    object_cols = df.select_dtypes(include="object").columns
-    for col in object_cols:
+    # ✅ أسرع بكتير - بنحسب كل الـ medians مرة واحدة
+    num_cols = df.select_dtypes(include=np.number).columns
+    medians  = df[num_cols].median().to_dict()
+    df[num_cols] = df[num_cols].fillna(value=medians)
+
+    # Categorical
+    cat_cols = df.select_dtypes(include="object").columns
+    for col in cat_cols:
         df[col] = df[col].fillna("Unknown")
 
     print("✅ Missing filled (train)")
