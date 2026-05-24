@@ -1,0 +1,14 @@
+data/raw/*.csv
+*.zip
+venv/
+__pycache__/
+*.pyc
+venv/
+__pycache__/
+artifacts/
+**/__pycache__/
+*.pkl
+*.png
+artifacts/
+**/__pycache__/
+*.pkl
