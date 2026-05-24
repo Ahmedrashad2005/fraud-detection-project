@@ -125,13 +125,14 @@ def encode_inference(df, encoders):
 def reduce_memory(df):
     before = df.memory_usage().sum() / 1e6
 
-    int_cols = df.select_dtypes(include=["int64"]).columns
-    for col in int_cols:
-        df[col] = pd.to_numeric(df[col], downcast="integer")
-
+    # ✅ أسرع بكتير - بنحول كل الأعمدة دفعة واحدة بدل loop
     float_cols = df.select_dtypes(include=["float64"]).columns
-    for col in float_cols:
-        df[col] = pd.to_numeric(df[col], downcast="float")
+    if len(float_cols):
+        df[float_cols] = df[float_cols].astype(np.float32)
+
+    int_cols = df.select_dtypes(include=["int64"]).columns
+    if len(int_cols):
+        df[int_cols] = df[int_cols].astype(np.int32)
 
     after = df.memory_usage().sum() / 1e6
     print(f"✅ Memory: {before:.1f} → {after:.1f} MB")
