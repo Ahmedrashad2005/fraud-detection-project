@@ -142,7 +142,6 @@ def reduce_memory(df):
 # ================================================================
 # preprocess_train
 # ================================================================
-
 def preprocess_train(df):
     print("\n" + "="*60)
     print("TRAIN PREPROCESSING")
@@ -155,6 +154,9 @@ def preprocess_train(df):
 
     # 2. Drop high missing
     df, dropped_cols = drop_high_missing(df)
+    
+    # 🌟 خطوة أمان 1: قلل الميموري فوراً بعد الحذف لتفريغ الرام
+    df = reduce_memory(df)
 
     # 3. Fill missing
     df, medians = fill_missing_train(df)
@@ -162,7 +164,7 @@ def preprocess_train(df):
     # 4. Encode
     df, encoders = encode_train(df)
 
-    # 5. Reduce memory
+    # 5. Reduce memory النهائي
     df = reduce_memory(df)
 
     # 6. Save artifacts
