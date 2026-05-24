@@ -62,27 +62,22 @@ def split_data(df):
 # 2. Preprocess + Feature Engineering
 # ================================================================
 def process_data(X_train, X_val, X_test):
-    print("\n" + "="*50)
-    print("PREPROCESS + FEATURES")
-    print("="*50)
 
-    X_train = preprocess_train(X_train)
-    X_val   = preprocess_inference(X_val)
-    X_test  = preprocess_inference(X_test)
-
+    # ✅ 1. Build features FIRST على raw strings
     X_train = build_features(X_train)
     X_val   = build_features(X_val)
     X_test  = build_features(X_test)
 
+    # ✅ 2. Then preprocess
+    X_train = preprocess_train(X_train)
+    X_val   = preprocess_inference(X_val)
+    X_test  = preprocess_inference(X_test)
+
+    # Align
     X_val  = X_val.reindex(columns=X_train.columns, fill_value=0)
     X_test = X_test.reindex(columns=X_train.columns, fill_value=0)
 
-    print(f"✅ Train : {X_train.shape}")
-    print(f"✅ Val   : {X_val.shape}")
-    print(f"✅ Test  : {X_test.shape}")
-
     return X_train, X_val, X_test
-
 
 # ================================================================
 # 3. Aggregation Features (fit on train only)

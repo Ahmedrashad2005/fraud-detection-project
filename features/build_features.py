@@ -96,31 +96,30 @@ def add_email_features(df: pd.DataFrame) -> pd.DataFrame:
 # Card Features (on raw strings)
 # ================================================================
 def add_card_features(df: pd.DataFrame) -> pd.DataFrame:
-
+    # خريطة تدعم الأسماء والنصوص وكذلك الأرقام المقابلة ليها لو معمل لها Encoding
     card_risk_map = {
-        'visa':             0.018,
-        'mastercard':       0.031,
-        'american express': 0.052,
-        'discover':         0.078,
+        'visa': 0.018, 1: 0.018, 0: 0.018, # أضفنا الأرقام المقابلة المتوقعة
+        'mastercard': 0.031, 2: 0.031,
+        'american express': 0.052, 3: 0.052,
+        'discover': 0.078, 4: 0.078,
     }
 
     if 'card4' in df.columns:
-        df['card_risk_score'] = df['card4']\
-                                 .map(card_risk_map).fillna(0.04)
-        df['is_discover']     = (df['card4'] == 'discover').astype(int)
-        df['is_amex']         = (df['card4'] == 'american express').astype(int)
-        df['is_visa']         = (df['card4'] == 'visa').astype(int)
-        df['is_mastercard']   = (df['card4'] == 'mastercard').astype(int)
+        df['card_risk_score'] = df['card4'].map(card_risk_map).fillna(0.04)
+        # التشيك يقبل النص أو الرقم المقابل ليه في عينة الداتا
+        df['is_discover']     = df['card4'].isin(['discover', 4, 4.0]).astype(int)
+        df['is_amex']         = df['card4'].isin(['american express', 3, 3.0]).astype(int)
+        df['is_visa']         = df['card4'].isin(['visa', 1, 1.0, 0, 0.0]).astype(int)
+        df['is_mastercard']   = df['card4'].isin(['mastercard', 2, 2.0]).astype(int)
 
-        # Debug
         print(f"  card4 sample    : {df['card4'].unique()[:5].tolist()}")
         print(f"  is_discover sum : {df['is_discover'].sum()}")
 
     if 'card6' in df.columns:
-        df['is_credit'] = (df['card6'] == 'credit').astype(int)
-        df['is_debit']  = (df['card6'] == 'debit').astype(int)
+        # دعم النصوص والأرقام الظاهرة في الـ sample
+        df['is_credit'] = df['card6'].isin(['credit', 1, 1.0]).astype(int)
+        df['is_debit']  = df['card6'].isin(['debit', 2, 2.0]).astype(int)
 
-        # Debug
         print(f"  card6 sample    : {df['card6'].unique()[:5].tolist()}")
         print(f"  is_credit sum   : {df['is_credit'].sum()}")
 
@@ -132,24 +131,19 @@ def add_card_features(df: pd.DataFrame) -> pd.DataFrame:
 # Device Features (on raw strings)
 # ================================================================
 def add_device_features(df: pd.DataFrame) -> pd.DataFrame:
-
     if 'DeviceType' not in df.columns:
         return df
 
     device_risk = {
-        'mobile':  0.062,
-        'desktop': 0.031,
+        'mobile':  0.062, 1: 0.062,
+        'desktop': 0.031, 2: 0.031,
     }
 
-    df['is_mobile']         = (df['DeviceType'] == 'mobile').astype(int)
-    df['is_desktop']        = (df['DeviceType'] == 'desktop').astype(int)
-    df['device_risk_score'] = df['DeviceType']\
-                               .map(device_risk).fillna(0.04)
-    df['device_missing']    = df['DeviceType']\
-                               .isin(['Unknown', None, np.nan])\
-                               .astype(int)
+    df['is_mobile']         = df['DeviceType'].isin(['mobile', 1, 1.0]).astype(int)
+    df['is_desktop']        = df['DeviceType'].isin(['desktop', 2, 2.0]).astype(int)
+    df['device_risk_score'] = df['DeviceType'].map(device_risk).fillna(0.04)
+    df['device_missing']    = df['DeviceType'].isin(['Unknown', None, np.nan, 0, 0.0]).astype(int)
 
-    # Debug
     print(f"  DeviceType sample : {df['DeviceType'].unique()[:5].tolist()}")
     print(f"  is_mobile sum     : {df['is_mobile'].sum()}")
 
