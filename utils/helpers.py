@@ -1,0 +1,468 @@
+# features/preprocess.py
+
+import pandas as pd
+import numpy as np
+import joblib
+
+from config.paths import (
+    ARTIFACTS_DIR,
+    PREPROCESS_DIR
+)
+
+DROP_COLS = ["TransactionID", "TransactionDT"]
+
+# ================================================================
+# Paths
+# ================================================================
+
+ENCODERS_PATH = PREPROCESS_DIR / "encoders.pkl"
+MEDIANS_PATH  = PREPROCESS_DIR / "medians.pkl"
+COLUMNS_PATH  = PREPROCESS_DIR / "feature_columns.pkl"
+DROPPED_PATH  = PREPROCESS_DIR / "dropped_cols.pkl"
+
+# ================================================================
+# Basic Cleaning
+# ================================================================
+
+def drop_useless_cols(df):
+
+    cols = [
+        c for c in DROP_COLS
+        if c in df.columns
+    ]
+
+    df = df.drop(columns=cols)
+
+    print(
+        f"✅ Dropped {len(cols)} useless columns"
+    )
+
+    return df
+
+
+def drop_high_missing(
+    df,
+    threshold=0.90
+):
+
+    missing_rate = df.isnull().mean()
+
+    high_missing = (
+        missing_rate[
+            missing_rate > threshold
+        ]
+        .index
+        .tolist()
+    )
+
+    df = df.drop(
+        columns=high_missing
+    )
+
+    print(
+        f"✅ Dropped {len(high_missing)} "
+        f"high-missing columns"
+    )
+
+    return df, high_missing
+
+# ================================================================
+# Missing Values
+# ================================================================
+
+def fill_missing_train(df):
+
+    medians = {}
+
+    numeric_cols = (
+        df.select_dtypes(
+            include=np.number
+        )
+        .columns
+    )
+
+    for col in numeric_cols:
+
+        med = df[col].median()
+
+        df[col] = df[col].fillna(med)
+
+        medians[col] = med
+
+    object_cols = (
+        df.select_dtypes(
+            include="object"
+        )
+        .columns
+    )
+
+    for col in object_cols:
+
+        df[col] = df[col].fillna(
+            "Unknown"
+        )
+
+    print(
+        "✅ Missing filled (train)"
+    )
+
+    return df, medians
+
+
+def fill_missing_inference(
+    df,
+    medians
+):
+
+    for col, med in medians.items():
+
+        if col in df.columns:
+
+            df[col] = df[col].fillna(med)
+
+    object_cols = (
+        df.select_dtypes(
+            include="object"
+        )
+        .columns
+    )
+
+    for col in object_cols:
+
+        df[col] = df[col].fillna(
+            "Unknown"
+        )
+
+    print(
+        "✅ Missing filled (inference)"
+    )
+
+    return df
+
+# ================================================================
+# Encoding
+# ================================================================
+
+def encode_train(df):
+
+    encoders = {}
+
+    object_cols = (
+        df.select_dtypes(
+            include="object"
+        )
+        .columns
+    )
+
+    for col in object_cols:
+
+        uniques = (
+            df[col]
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+        mapping = {
+            val: idx
+            for idx, val in enumerate(uniques)
+        }
+
+        df[col] = (
+            df[col]
+            .astype(str)
+            .map(mapping)
+        )
+
+        encoders[col] = mapping
+
+    print(
+        f"✅ Encoded "
+        f"{len(encoders)} columns (train)"
+    )
+
+    return df, encoders
+
+
+def encode_inference(
+    df,
+    encoders
+):
+
+    for col, mapping in encoders.items():
+
+        if col in df.columns:
+
+            df[col] = (
+                df[col]
+                .astype(str)
+                .map(mapping)
+                .fillna(-1)
+            )
+
+    print(
+        "✅ Encoded (inference)"
+    )
+
+    return df
+
+# ================================================================
+# Memory Optimization
+# ================================================================
+
+def reduce_memory(df):
+
+    before = (
+        df.memory_usage()
+        .sum() / 1e6
+    )
+
+    int_cols = (
+        df.select_dtypes(
+            include=["int64"]
+        )
+        .columns
+    )
+
+    for col in int_cols:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            downcast="integer"
+        )
+
+    float_cols = (
+        df.select_dtypes(
+            include=["float64"]
+        )
+        .columns
+    )
+
+    for col in float_cols:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            downcast="float"
+        )
+
+    after = (
+        df.memory_usage()
+        .sum() / 1e6
+    )
+
+    print(
+        f"✅ Memory: "
+        f"{before:.1f} → {after:.1f} MB"
+    )
+
+    return df
+
+# ================================================================
+# preprocess_train
+# ================================================================
+
+def preprocess_train(df):
+
+    print("\n" + "="*60)
+    print("TRAIN PREPROCESSING")
+    print("="*60)
+
+    PREPROCESS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # ============================================================
+    # 1. Drop useless
+    # ============================================================
+
+    df = drop_useless_cols(df)
+
+    # ============================================================
+    # 2. Drop high missing
+    # ============================================================
+
+    df, dropped_cols = (
+        drop_high_missing(df)
+    )
+
+    # ============================================================
+    # 3. Fill missing
+    # ============================================================
+
+    df, medians = (
+        fill_missing_train(df)
+    )
+
+    # ============================================================
+    # 4. Encode
+    # ============================================================
+
+    df, encoders = (
+        encode_train(df)
+    )
+
+    # ============================================================
+    # 5. Reduce memory
+    # ============================================================
+
+    df = reduce_memory(df)
+
+    # ============================================================
+    # 6. Save artifacts
+    # ============================================================
+
+    joblib.dump(
+        encoders,
+        ENCODERS_PATH
+    )
+
+    joblib.dump(
+        medians,
+        MEDIANS_PATH
+    )
+
+    joblib.dump(
+        df.columns.tolist(),
+        COLUMNS_PATH
+    )
+
+    joblib.dump(
+        dropped_cols,
+        DROPPED_PATH
+    )
+
+    print("\n✅ Artifacts Saved")
+
+    print(
+        f"Final shape: {df.shape}"
+    )
+
+    print("="*60)
+
+    return df
+
+# ================================================================
+# preprocess_inference
+# ================================================================
+
+def preprocess_inference(df):
+
+    print("\n" + "="*60)
+    print("INFERENCE PREPROCESSING")
+    print("="*60)
+
+    # ============================================================
+    # Check artifacts
+    # ============================================================
+
+    assert ENCODERS_PATH.exists(), \
+        "❌ encoders.pkl not found"
+
+    assert MEDIANS_PATH.exists(), \
+        "❌ medians.pkl not found"
+
+    assert COLUMNS_PATH.exists(), \
+        "❌ feature_columns.pkl not found"
+
+    # ============================================================
+    # Load artifacts
+    # ============================================================
+
+    encoders = joblib.load(
+        ENCODERS_PATH
+    )
+
+    medians = joblib.load(
+        MEDIANS_PATH
+    )
+
+    columns = joblib.load(
+        COLUMNS_PATH
+    )
+
+    # ============================================================
+    # 1. Drop useless cols
+    # ============================================================
+
+    df = drop_useless_cols(df)
+
+    # ============================================================
+    # 2. Fill missing
+    # ============================================================
+
+    df = fill_missing_inference(
+        df,
+        medians
+    )
+
+    # ============================================================
+    # 3. Encode
+    # ============================================================
+
+    df = encode_inference(
+        df,
+        encoders
+    )
+
+    # ============================================================
+    # 4. Align columns
+    # ============================================================
+
+    for col in columns:
+
+        if col not in df.columns:
+
+            df[col] = 0
+
+    df = df[columns]
+
+    # ============================================================
+    # 5. Reduce memory
+    # ============================================================
+
+    df = reduce_memory(df)
+
+    print(
+        f"Final shape: {df.shape}"
+    )
+
+    print("="*60)
+
+    return df
+
+# ================================================================
+# Test Run
+# ================================================================
+
+if __name__ == "__main__":
+
+    from data.load_data import (
+        load_raw_data
+    )
+
+    print("\n🚀 TESTING PREPROCESS")
+
+    # ============================================================
+    # Train preprocess
+    # ============================================================
+
+    df = load_raw_data()
+
+    df = preprocess_train(df)
+
+    print(
+        "\n✅ preprocess_train DONE"
+    )
+
+    # ============================================================
+    # Inference preprocess
+    # ============================================================
+
+    df2 = load_raw_data()
+
+    df2 = preprocess_inference(df2)
+
+    print(
+        "\n✅ preprocess_inference DONE"
+    )

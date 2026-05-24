@@ -306,6 +306,10 @@ def main():
     X_train, X_val, X_test, \
     y_train, y_val, y_test = split_data(df)
 
+    # 🌟 فرّغ الرام من الـ df الأصلي (~2GB)
+    del df
+    import gc; gc.collect()
+
     # 3. Preprocess + Features
     X_train, X_val, X_test = process_data(X_train, X_val, X_test)
 
