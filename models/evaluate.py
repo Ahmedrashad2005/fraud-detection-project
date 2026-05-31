@@ -35,7 +35,7 @@ def load_artifacts():
     xgb_light      = joblib.load(LIGHT_DIR      / "xgb_light.pkl")
     lgbm_light     = joblib.load(LIGHT_DIR      / "lgbm_light.pkl")
     threshold      = joblib.load(PREPROCESS_DIR / "threshold.pkl")
-    top35_features = joblib.load(PREPROCESS_DIR / "top35_features.pkl")
+    top35_features = joblib.load(PREPROCESS_DIR / "manual_features.pkl")
     all_features   = joblib.load(PREPROCESS_DIR / "all_features.pkl")
 
     print("✅ Artifacts Loaded")

@@ -204,12 +204,13 @@ def preprocess_inference(df):
     # 3. Encode
     df = encode_inference(df, encoders)
 
-    # 4. Align columns (ضمان مطابقة شكل داتا الـ Train بالظبط للـ API والموديل)
-    for col in columns:
-        if col not in df.columns:
-            df[col] = 0
-
-    df = df[columns]
+    # 4. Align columns with the training schema.
+    # Missing numeric training columns should look like training medians, not
+    # literal zeroes, otherwise single-row dashboard inference becomes sparse
+    # and insensitive to user inputs.
+    fill_values = {col: medians.get(col, 0) for col in columns}
+    df = df.reindex(columns=columns)
+    df = df.fillna(value=fill_values)
 
     # 5. Reduce memory
     df = reduce_memory(df)

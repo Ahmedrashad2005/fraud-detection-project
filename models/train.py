@@ -209,17 +209,49 @@ def train_heavy(X_train, y_train, X_val, y_val):
 
 
 # ================================================================
-# 8. Train Light Models
+# 8. Manual Feature Selection
 # ================================================================
-def train_light(X_train, y_train, X_val, y_val, xgb_heavy):
+def get_manual_feature_columns(X_train):
+    """
+    Return only features derivable from dashboard inputs.
+    These are the ONLY columns a manual form user can supply.
+    """
+    candidates = [
+        # TransactionAmt
+        "TransactionAmt", "amount_log", "amount_sqrt", "amount_category",
+        # card4
+        "card4", "is_visa", "is_mastercard", "is_amex", "is_discover",
+        "card_risk_score",
+        # card6
+        "card6", "is_credit", "is_debit",
+        # DeviceType
+        "DeviceType", "is_mobile", "device_risk_score",
+        # dist1
+        "dist1", "dist1_log", "is_far_distance",
+        # hour
+        "hour", "is_morning", "is_night",
+        # P_emaildomain
+        "P_emaildomain", "is_free_email", "is_risky_email", "email_missing",
+        # ProductCD
+        "ProductCD",
+    ]
+    manual_features = [f for f in candidates if f in X_train.columns]
+    return manual_features
+
+
+# ================================================================
+# 9. Train Light Models (Manual Dashboard Features)
+# ================================================================
+def train_light(X_train, y_train, X_val, y_val):
     print("\n" + "="*50)
-    print("MODEL 2 — LIGHT (Top 35 Features)")
+    print("MODEL 2 — LIGHT (Manual Dashboard Features)")
     print("="*50)
 
-    importances = xgb_heavy.feature_importances_
-    top_idx     = np.argsort(importances)[-35:]
-    features    = X_train.columns[top_idx].tolist()
-    print(f"Features selected: {len(features)}")
+    features = get_manual_feature_columns(X_train)
+    print(f"Manual Features: {len(features)}")
+    print(f"Coverage: 100% dashboard-derived")
+    for i, f in enumerate(features, 1):
+        print(f"  {i:2d}. {f}")
 
     X_tr = X_train[features]
     X_va = X_val[features]
@@ -234,9 +266,9 @@ def train_light(X_train, y_train, X_val, y_val, xgb_heavy):
     lgbm_l = LGBMClassifier(**LGBM_LIGHT_PARAMS)
     lgbm_l.fit(X_tr, y_train)
 
-    print(f"\nXGBoost Light  VAL AUC: "
+    print(f"\nXGBoost Manual  VAL AUC: "
           f"{roc_auc_score(y_val, xgb_l.predict_proba(X_va)[:,1]):.4f}")
-    print(f"LightGBM Light VAL AUC: "
+    print(f"LightGBM Manual VAL AUC: "
           f"{roc_auc_score(y_val, lgbm_l.predict_proba(X_va)[:,1]):.4f}")
 
     return xgb_l, lgbm_l, features
@@ -283,7 +315,7 @@ def save_all(models, all_features, light_features,
 
     # Preprocessing Artifacts
     joblib.dump(all_features,   PREPROCESS_DIR / "all_features.pkl")
-    joblib.dump(light_features, PREPROCESS_DIR / "top35_features.pkl")
+    joblib.dump(light_features, PREPROCESS_DIR / "manual_features.pkl")
     joblib.dump(threshold,      PREPROCESS_DIR / "threshold.pkl")
 
     medians = X_train.median().to_dict()
@@ -328,9 +360,9 @@ def main():
     # 6. Heavy Models
     xgb, lgbm = train_heavy(X_train, y_train, X_val, y_val)
 
-    # 7. Light Models
+    # 7. Light Models (Manual Dashboard Features)
     xgb_l, lgbm_l, light_features = train_light(
-        X_train, y_train, X_val, y_val, xgb
+        X_train, y_train, X_val, y_val
     )
 
     # 8. Threshold on Val
@@ -350,6 +382,16 @@ def main():
         xgb, lgbm, xgb_l, lgbm_l, X_test, light_features
     )
     evaluate(test_probs, y_test, threshold, "FINAL ENSEMBLE")
+
+    # 9b. Light-Only Evaluation on Test
+    print("\n" + "="*50)
+    print("LIGHT-ONLY EVALUATION (Manual Features)")
+    print("="*50)
+    light_test_probs = (
+        0.60 * xgb_l.predict_proba(X_test[light_features])[:, 1] +
+        0.40 * lgbm_l.predict_proba(X_test[light_features])[:, 1]
+    )
+    evaluate(light_test_probs, y_test, threshold, "LIGHT MANUAL")
 
     # 10. Save
     save_all(
