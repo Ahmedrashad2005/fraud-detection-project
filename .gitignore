@@ -12,3 +12,4 @@ artifacts/
 artifacts/
 **/__pycache__/
 *.pkl
+venv/
