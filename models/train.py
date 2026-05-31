@@ -212,31 +212,95 @@ def train_heavy(X_train, y_train, X_val, y_val):
 # 8. Manual Feature Selection
 # ================================================================
 def get_manual_feature_columns(X_train):
-    """
-    Return only features derivable from dashboard inputs.
-    These are the ONLY columns a manual form user can supply.
-    """
+
+
+
     candidates = [
+
         # TransactionAmt
-        "TransactionAmt", "amount_log", "amount_sqrt", "amount_category",
+
+        "TransactionAmt",
+
+        "amount_log",
+
+        "amount_sqrt",
+
+        "amount_category",
+
+
+
         # card4
-        "card4", "is_visa", "is_mastercard", "is_amex", "is_discover",
-        "card_risk_score",
+
+        "card4",
+
+        "is_visa",
+
+        "is_mastercard",
+
+        "is_amex",
+
+        "is_discover",
+
+
+
         # card6
-        "card6", "is_credit", "is_debit",
+
+        "card6",
+
+        "is_credit",
+
+        "is_debit",
+
+
+
         # DeviceType
-        "DeviceType", "is_mobile", "device_risk_score",
+
+        "DeviceType",
+
+        "is_mobile",
+
+
+
         # dist1
-        "dist1", "dist1_log", "is_far_distance",
+
+        "dist1",
+
+        "dist1_log",
+
+        "is_far_distance",
+
+
+
         # hour
-        "hour", "is_morning", "is_night",
-        # P_emaildomain
-        "P_emaildomain", "is_free_email", "is_risky_email", "email_missing",
+
+        "hour",
+
+        "is_morning",
+
+        "is_night",
+
+
+
+        # email
+
+        "P_emaildomain",
+
+        "is_free_email",
+
+        "email_missing",
+
+
+
         # ProductCD
+
         "ProductCD",
+
     ]
-    manual_features = [f for f in candidates if f in X_train.columns]
-    return manual_features
+
+
+
+    return [f for f in candidates if f in X_train.columns]
+    
 
 
 # ================================================================
