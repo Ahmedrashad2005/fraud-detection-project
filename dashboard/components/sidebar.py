@@ -1,85 +1,96 @@
 # dashboard/components/sidebar.py
-"""
-Sidebar — Navigation and system info panel.
-"""
+"""Institutional sidebar navigation."""
+
+import sys
+from datetime import datetime
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
-from datetime import datetime
+
 from dashboard.styles.theme import COLORS
 from services.data_loader import get_artifact_status
 
-def render_sidebar():
-    """Render the sidebar navigation and return the selected page."""
+
+def render_sidebar() -> str:
     with st.sidebar:
-        # ── Brand Header ──
-        st.markdown(f"""
-        <div class="fg-brand">
-            <div class="fg-shield">🛡️</div>
+        st.markdown("""
+        <div class="bk-sidebar-brand">
+            <div class="bk-sidebar-logo">FG</div>
             <div>
-                <div class="fg-brand-title">FraudGuard AI</div>
-                <div class="fg-brand-subtitle">Enterprise Detection</div>
+                <div class="bk-sidebar-title">FraudGuard</div>
+                <div class="bk-sidebar-sub">Tier-1 Risk Desk</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("""
-        <div class="fg-profile">
-            <div class="fg-avatar">👤</div>
+        <div class="bk-officer-card">
+            <div class="bk-officer-avatar">👤</div>
             <div>
-                <div class="fg-profile-name">
-                </div>
-                <div class="fg-profile-meta"></div>
+                <div class="bk-officer-name">A. Hassan</div>
+                <div class="bk-officer-role">Senior Fraud Analyst</div>
+                <div class="bk-officer-role">Payment Risk · L2</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Navigation ──
-        st.markdown('<div class="fg-sidebar-label">Navigation</div>',
-                    unsafe_allow_html=True)
-
+        st.markdown('<div class="bk-nav-label">Operations</div>', unsafe_allow_html=True)
         page = st.radio(
             label="nav",
             options=[
-                "Real-time Verification",
-                "Executive Batch Dashboard",
+                "Payment Authorization",
+                "Portfolio Surveillance",
             ],
             label_visibility="collapsed",
         )
 
-        # ── System Status ──
+        st.markdown('<div class="bk-nav-label">Desk Utilities</div>', unsafe_allow_html=True)
+        st.caption("Threshold policies sync from model registry.")
+        st.markdown('<div class="bk-nav-label">Infrastructure</div>', unsafe_allow_html=True)
+
         status = get_artifact_status()
-        model_items = [
-            ("XGB Heavy", "xgb_heavy"),
-            ("LGBM Heavy", "lgbm_heavy"),
-            ("Iso Forest", "iso_forest"),
-            ("XGB Light", "xgb_light"),
-            ("LGBM Light", "lgbm_light"),
+        models = [
+            ("Authorization (XGB)", "xgb_light"),
+            ("Authorization (LGBM)", "lgbm_light"),
+            ("Batch Ensemble (XGB)", "xgb_heavy"),
+            ("Batch Ensemble (LGBM)", "lgbm_heavy"),
+            ("Anomaly Engine (ISO)", "iso_forest"),
         ]
-        model_rows = "".join(
-            (
-                f'<div class="fg-model-row"><span>{name}</span>'
-                f'<strong>● {"Online" if status.get(key, False) else "Missing"}</strong></div>'
-            )
-            for name, key in model_items
-        )
-        system_online = bool(status.get("inference_backend"))
+        rows = ""
+        for name, key in models:
+            ok = status.get(key, False)
+            cls = "bk-online" if ok else "bk-offline"
+            label = "Online" if ok else "Offline"
+            rows += f'<div class="bk-model-row"><span>{name}</span><strong class="{cls}">{label}</strong></div>'
+
+        system_ok = status.get("inference_backend", False)
         st.markdown(f"""
-        <div class="fg-status-box">
-            <div class="fg-sidebar-label">System Status</div>
-            <div class="fg-status-title">
-                System Status: <span>{'🟢 Optimal Performance' if system_online else '🟠 Degraded Mode'}</span>
+        <div class="bk-status-box">
+            <div class="bk-nav-label" style="margin-top:0">Model Registry</div>
+            <div style="font-size:12px;font-weight:700;color:{COLORS['gold_light']};margin-bottom:10px;">
+                {'● Systems Nominal' if system_ok else '● Degraded Mode'}
             </div>
-            {model_rows}
+            {rows}
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Timestamp ──
         st.markdown(f"""
-        <div style="margin-top: 18px; padding-top: 12px;
-                    border-top: 1px solid {COLORS['border']};">
-            <div style="font-size: 10px; color: {COLORS['text_muted']};">
-                Last Update: {datetime.now().strftime('%d %b %Y, %H:%M')}</div>
+        <div style="margin-top:20px;padding-top:14px;border-top:1px solid {COLORS['border']};">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{COLORS['text_muted']};">
+                Last Registry Sync
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{COLORS['text_secondary']};margin-top:4px;">
+                {datetime.now().strftime('%d %b %Y · %H:%M')}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-    return page
+    mapping = {
+        "Payment Authorization": "realtime",
+        "Portfolio Surveillance": "batch",
+    }
+    return mapping.get(page, "realtime")

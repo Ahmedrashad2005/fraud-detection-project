@@ -19,8 +19,8 @@ try:
 except Exception as e:
     print(f"❌ 1. Paths Check Failed: {e}\n")
 
-# 3. محاكاة بيانات عملية فردية قادمة من الـ Form في الداشبورد
-mock_form_input = {
+# 3. عينة بيانات عملية فردية قادمة من الـ Form في الداشبورد
+sample_form_input = {
     "TransactionAmt": 35.00,
     "ProductCD": "W",
     "card4": "mastercard",
@@ -32,17 +32,18 @@ mock_form_input = {
 }
 
 # تحويلها لـ DataFrame من سطر واحد (Single Row) لاختبار مرونة الـ Pipeline
-single_row_df = pd.DataFrame([mock_form_input])
+single_row_df = pd.DataFrame([sample_form_input])
 
 # 4. اختبار الـ Preprocessing والـ Feature Engineering
 try:
     # استدعاء الدوال من الملفات اللي طلبت مراجعتها
-    from models.predict import build_features_inference
+    from features.build_features import build_features
+    from features.preprocess import preprocess_inference
     
     print("⏳ 2. Testing Preprocessing & Feature Engineering Layers...")
     
     # تشغيل الـ Feature Engineering + Preprocessing بنفس ترتيب inference
-    final_features_df = build_features_inference(single_row_df)
+    final_features_df = preprocess_inference(build_features(single_row_df))
     
     print("✅ 2. Feature Pipeline Passed! Single-row transformations are fully functional.\n")
 except Exception as e:
@@ -55,7 +56,7 @@ try:
     
     # تشغيل الـ Predict المباشر اللي الداشبورد بتستدعيه
     # بنباصي له الداتا الـ Raw وهو بيشغل جواها الـ Preprocess والموديل الخفيف (Light)
-    result = predict_transaction(mock_form_input, threshold=0.75, light_only=True)
+    result = predict_transaction(sample_form_input, threshold=0.75, light_only=True)
     
     if result.ok:
         print("✅ 3. Inference Mechanism Passed!")

@@ -12,15 +12,15 @@ import streamlit as st
 from dashboard.styles.theme import COLORS, PLOTLY_LAYOUT
 
 BANK = {
-    "panel": "#171A1D",
-    "plot": "#121619",
-    "grid": "rgba(189, 195, 199, 0.09)",
-    "teal": "#21B8A6",
-    "gold": "#D6A94A",
-    "green": "#38B46B",
-    "red": "#D94B4B",
+    "panel": "#0F2847",
+    "plot": "#0A1E36",
+    "grid": "rgba(197, 165, 114, 0.08)",
+    "teal": "#3D8B8B",
+    "gold": "#C5A572",
+    "green": "#2D8A62",
+    "red": "#C45C5C",
     "blue": "#5B8DEF",
-    "muted": "#8A969E",
+    "muted": "#6B7F94",
 }
 
 
@@ -218,8 +218,7 @@ def render_temporal_heatmap(df: pd.DataFrame = None):
         pivot = pivot.reindex(index=range(7), columns=range(24), fill_value=0)
         z_data = pivot.values
     else:
-        from dashboard.services.mock_data import generate_temporal_heatmap_data
-        z_data, _, _ = generate_temporal_heatmap_data()
+        z_data = [[0 for _ in range(24)] for _ in range(7)]
 
     fig = go.Figure(go.Heatmap(
         z=z_data,
@@ -250,22 +249,29 @@ def render_temporal_heatmap(df: pd.DataFrame = None):
 # ================================================================
 # Model Drift & Infrastructure Health
 # ================================================================
-def render_model_drift_infrastructure(status: dict = None):
-    """Render Plotly model drift and infrastructure health bars."""
+def render_model_drift_infrastructure(status: dict = None, drift_report: dict | None = None):
+    """Render infrastructure health and optional data-drift scores."""
     st.markdown(
         '<div class="section-header">Model Drift & Infrastructure Health</div>',
         unsafe_allow_html=True,
     )
 
     status = status or {}
+    drift_report = drift_report or {}
+    drift_health = drift_report.get("overall_health")
+
     labels = ["XGB Heavy", "LGBM Heavy", "Isolation Forest", "Feature Pipeline", "Artifact Store"]
     values = [
         96 if status.get("xgb_heavy", True) else 28,
         94 if status.get("lgbm_heavy", True) else 28,
         82 if status.get("iso_forest", True) else 25,
-        91 if status.get("all_features", True) and status.get("top35_features", True) else 35,
+        91 if status.get("all_features", True) and status.get("manual_features", True) else 35,
         95 if status.get("inference_backend", True) else 30,
     ]
+
+    if drift_health is not None:
+        labels.append("Data Drift Index")
+        values.append(float(drift_health))
     colors = [BANK["green"] if value >= 85 else BANK["gold"] if value >= 65 else BANK["red"] for value in values]
 
     fig = go.Figure(go.Bar(

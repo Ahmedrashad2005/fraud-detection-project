@@ -10,6 +10,17 @@ REF_DATE = datetime(2017, 11, 30)
 # ================================================================
 def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
     if 'TransactionDT' not in df.columns:
+        if 'hour' in df.columns:
+            hour = pd.to_numeric(df['hour'], errors='coerce').fillna(12).astype(int).clip(0, 23)
+            df['hour'] = hour
+            df['is_night']     = (hour < 6).astype(int)
+            df['is_morning']   = ((hour >= 6)  & (hour < 12)).astype(int)
+            df['is_afternoon'] = ((hour >= 12) & (hour < 18)).astype(int)
+            df['is_evening']   = (hour >= 18).astype(int)
+            df['is_rush_hour'] = (hour.isin([8, 9, 17, 18])).astype(int)
+            df['hour_sin']     = np.sin(2 * np.pi * hour / 24)
+            df['hour_cos']     = np.cos(2 * np.pi * hour / 24)
+            print("✅ Time features built from hour")
         return df
 
     dt = df['TransactionDT'].apply(
@@ -161,6 +172,43 @@ def add_cross_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ================================================================
+# Risk Signal Features (velocity / domain / geo)
+# ================================================================
+SUSPICIOUS_DOMAINS = {
+    "anonymous.com", "protonmail.com", "mail.ru", "yandex.ru",
+    "guerrillamail.com", "tempmail.com", "10minutemail.com",
+}
+
+
+def add_risk_signal_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Heuristic risk signals usable after retrain (manual + heavy feature sets)."""
+    if "TransactionAmt" in df.columns and "dist1" in df.columns:
+        amt = df["TransactionAmt"].fillna(0)
+        dist = df["dist1"].fillna(0)
+        df["amt_x_distance"] = amt * np.log1p(dist + 1)
+        df["geo_amount_risk"] = (
+            (dist > 500).astype(int) * (amt > 500).astype(int)
+        )
+
+    if "P_emaildomain" in df.columns:
+        domain = df["P_emaildomain"].astype(str).str.lower()
+        df["is_suspicious_domain"] = domain.isin(SUSPICIOUS_DOMAINS).astype(int)
+        df["domain_length"] = domain.str.len().clip(upper=60)
+
+    if "hour" in df.columns and "is_high_amount" in df.columns and "is_night" in df.columns:
+        df["night_x_high_amount"] = df["is_night"] * df["is_high_amount"]
+
+    if "TransactionAmt" in df.columns and "hour" in df.columns:
+        df["amt_hour_risk"] = (
+            df["TransactionAmt"].fillna(0)
+            * df["hour"].isin([0, 1, 2, 3, 4, 5]).astype(int)
+        )
+
+    print("✅ Risk signal features built")
+    return df
+
+
+# ================================================================
 # Full Pipeline (تم حذف الـ composite_risk)
 # ================================================================
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -173,11 +221,12 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df = add_time_features(df)
     df = add_amount_features(df)
-    df = add_email_features(df)    
-    df = df = add_card_features(df)     
-    df = add_device_features(df)   
+    df = add_email_features(df)
+    df = add_card_features(df)
+    df = add_device_features(df)
     df = add_distance_features(df)
     df = add_cross_features(df)
+    df = add_risk_signal_features(df)
 
     cols_after = df.shape[1]
 

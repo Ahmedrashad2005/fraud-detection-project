@@ -185,10 +185,14 @@ def preprocess_inference(df):
     print("INFERENCE PREPROCESSING")
     print("="*60)
 
-    # Check artifacts
-    assert ENCODERS_PATH.exists(), "❌ encoders.pkl not found"
-    assert MEDIANS_PATH.exists(), "❌ medians.pkl not found"
-    assert COLUMNS_PATH.exists(), "❌ feature_columns.pkl not found"
+    missing = [
+        str(path) for path in (ENCODERS_PATH, MEDIANS_PATH, COLUMNS_PATH)
+        if not path.exists()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Missing preprocessing artifacts: " + ", ".join(missing)
+        )
 
     # Load artifacts
     encoders = joblib.load(ENCODERS_PATH)

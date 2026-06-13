@@ -18,6 +18,7 @@ from sklearn.metrics import (
 from config.paths import (
     HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR, ARTIFACTS_DIR
 )
+from features.aggregation import apply_aggregation_features
 
 PLOTS_DIR = ARTIFACTS_DIR / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,7 +61,7 @@ def ensemble_predict(xgb, lgbm, xgb_light, lgbm_light,
 # Compute Metrics
 # ================================================================
 def compute_metrics(y_true, probs, threshold, name="Model"):
-    preds     = (probs > threshold).astype(int)
+    preds     = (probs >= threshold).astype(int)
     auc       = roc_auc_score(y_true, probs)
     f1        = f1_score(y_true, preds)
     precision = precision_score(y_true, preds)
@@ -144,7 +145,7 @@ def plot_pr_curves(models_probs, y_true):
 # Plot Confusion Matrix
 # ================================================================
 def plot_confusion_matrix(y_true, probs, threshold):
-    preds   = (probs > threshold).astype(int)
+    preds   = (probs >= threshold).astype(int)
     cm      = confusion_matrix(y_true, preds)
     cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
 
@@ -227,16 +228,22 @@ def run_evaluation(X_test, y_test):
     (xgb, lgbm, iso, xgb_light, lgbm_light,
      threshold, top35, all_features) = load_artifacts()
 
-    # Align features
-    X_test = X_test.reindex(columns=all_features, fill_value=0)
+    # Replay train-fitted aggregation features before schema alignment.
+    X_test = apply_aggregation_features(X_test)
 
     # ISO score
-    X_test        = X_test.copy()
-    iso_features  = [c for c in iso.feature_names_in_
-                     if c in X_test.columns]
-    X_test["iso_score"] = iso.decision_function(
-        X_test[iso_features]
+    X_test = X_test.copy()
+    base_features = [c for c in all_features if c != "iso_score"]
+    X_test = X_test.reindex(columns=base_features, fill_value=0)
+    iso_features = [
+        c for c in getattr(iso, "feature_names_in_", [])
+        if c != "iso_score"
+    ]
+    X_test["iso_score"] = (
+        iso.decision_function(X_test.reindex(columns=iso_features, fill_value=0))
+        if iso_features else np.zeros(len(X_test))
     )
+    X_test = X_test.reindex(columns=all_features, fill_value=0)
 
     # Light features
     valid_top35 = [c for c in top35 if c in X_test.columns]
@@ -281,7 +288,7 @@ def run_evaluation(X_test, y_test):
 # ================================================================
 # Run
 # ================================================================
-if __name__ == "__main__":
+def main():
     from data.load_data import load_raw_data
     from models.train import split_data
     from features.preprocess import preprocess_inference
@@ -289,11 +296,10 @@ if __name__ == "__main__":
 
     df = load_raw_data()
     _, _, test_df, _, _, y_test = split_data(df)
-
-    # ✅ Build features FIRST
     X_test = build_features(test_df)
-
-    # ✅ Then preprocess
     X_test = preprocess_inference(X_test)
-
     run_evaluation(X_test, y_test)
+
+
+if __name__ == "__main__":
+    main()

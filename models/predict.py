@@ -1,387 +1,311 @@
 # models/predict.py
-"""
-Fraud Detection — Inference Module
-===================================
-Two inference paths:
-  • predict_light()       → manual dashboard (xgb_light + lgbm_light on manual features)
-  • predict_batch_heavy() → batch CSV upload  (xgb_heavy + lgbm_heavy + iso_forest)
-"""
-
+import numpy as np
 import pandas as pd
 import joblib
-import numpy as np
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
-from config.paths import HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR
-from features.preprocess import preprocess_inference
+from config.paths import (
+    HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR, MANUAL_FEATURES,
+    LIGHT_THRESHOLD, FEATURE_MEDIANS,
+)
+from config.params import HEAVY_ENSEMBLE_WEIGHTS, LIGHT_ENSEMBLE_WEIGHTS
+from features.aggregation import apply_aggregation_features
 from features.build_features import build_features
-
+from features.preprocess import preprocess_inference
 
 # ================================================================
-# Load Models Once at Startup
+# Load Once at Startup
 # ================================================================
-def load_models():
-    """Load all models and artifacts. Returns a tuple for backward compat."""
-    xgb_heavy  = joblib.load(HEAVY_DIR      / "xgb_heavy.pkl")
-    lgbm_heavy = joblib.load(HEAVY_DIR      / "lgbm_heavy.pkl")
-    iso        = joblib.load(HEAVY_DIR      / "iso_forest.pkl")
-    xgb_light  = joblib.load(LIGHT_DIR      / "xgb_light.pkl")
-    lgbm_light = joblib.load(LIGHT_DIR      / "lgbm_light.pkl")
-    manual_feats = joblib.load(PREPROCESS_DIR / "manual_features.pkl")
-    all_feats  = joblib.load(PREPROCESS_DIR / "all_features.pkl")
+def _load_models() -> dict:
     try:
-        threshold = float(joblib.load(PREPROCESS_DIR / "threshold.pkl"))
-    except Exception:
-        threshold = 0.5
-    return (xgb_heavy, lgbm_heavy, iso,
-            xgb_light, lgbm_light,
-            threshold, manual_feats, all_feats)
+        m = {
+            "xgb_heavy":       joblib.load(HEAVY_DIR      / "xgb_heavy.pkl"),
+            "lgbm_heavy":      joblib.load(HEAVY_DIR      / "lgbm_heavy.pkl"),
+            "iso":             joblib.load(HEAVY_DIR      / "iso_forest.pkl"),
+            "xgb_light":       joblib.load(LIGHT_DIR      / "xgb_light.pkl"),
+            "lgbm_light":      joblib.load(LIGHT_DIR      / "lgbm_light.pkl"),
+            "all_feats":       joblib.load(PREPROCESS_DIR / "all_features.pkl"),
+            "threshold":       float(joblib.load(PREPROCESS_DIR / "threshold.pkl")),
+            "manual_features": joblib.load(MANUAL_FEATURES),
+            "feature_medians": joblib.load(FEATURE_MEDIANS) if FEATURE_MEDIANS.exists() else {},
+            "loaded":          True,
+        }
+        # Load calibrated light-only threshold (falls back to ensemble threshold)
+        if LIGHT_THRESHOLD.exists():
+            m["light_threshold"] = float(joblib.load(LIGHT_THRESHOLD))
+        else:
+            m["light_threshold"] = m["threshold"]
+    except Exception as e:
+        m = {"loaded": False, "error": str(e), "threshold": 0.75,
+             "light_threshold": 0.75}
+    return m
 
-
-# Load once at module level
-MODELS = load_models()
-
+# ✅ Load ONCE
+MODELS = _load_models()
 
 # ================================================================
-# Input Validation
+# Helpers
 # ================================================================
-def validate_input(user_input):
-    """Validate and clean user input."""
+def _get_threshold(override: Optional[float]) -> float:
+    """Get the ensemble threshold (for batch/heavy inference)."""
+    t = override if override is not None else MODELS["threshold"]
+    return float(min(max(t, 0.01), 0.99))
+
+def _get_light_threshold(override: Optional[float]) -> float:
+    """Get the light-model threshold (calibrated for real-time inference)."""
+    t = override if override is not None else MODELS["light_threshold"]
+    return float(min(max(t, 0.01), 0.99))
+
+
+def _training_fill_values(columns: list[str]) -> dict:
+    medians = MODELS.get("feature_medians", {}) or {}
+    return {col: medians.get(col, 0) for col in columns}
+
+def _risk_level(score: float, threshold: float) -> dict:
+    # ✅ FIX: منع التناقض بين risk_level و is_fraud
+    # HIGH RISK   = فوق الـ threshold
+    # MEDIUM RISK = بين 60% و 100% من الـ threshold
+    # LOW RISK    = تحت 60% من الـ threshold
+    if score >= threshold:
+        return {"level": "HIGH RISK",   "emoji": "🚨",
+                "action": "Block immediately", "color": "red"}
+    elif score >= threshold * 0.6:
+        return {"level": "MEDIUM RISK", "emoji": "⚠️",
+                "action": "Review required",   "color": "orange"}
+    else:
+        return {"level": "LOW RISK",    "emoji": "✅",
+                "action": "Approved",          "color": "green"}
+
+# ✅ FIX 5: validation أقوى
+VALID_CARD4     = {"visa", "mastercard", "american express", "discover"}
+VALID_CARD6     = {"debit", "credit", "debit or credit", "charge card"}
+VALID_DEVICE    = {"desktop", "mobile"}
+
+
+def _heuristic_risk(user_input: dict) -> float:
+    """Rule-based risk overlay (works without retraining)."""
+    score = 0.0
+    try:
+        amt = float(user_input.get("TransactionAmt", 0) or 0)
+        dist = float(user_input.get("dist1", 0) or 0)
+        hour = int(user_input.get("hour", 12))
+        domain = str(user_input.get("P_emaildomain", "") or "").lower()
+    except (TypeError, ValueError):
+        return 0.0
+
+    if amt > 1000:
+        score += 0.22
+    if dist > 500:
+        score += 0.18
+    if hour < 6:
+        score += 0.12
+    if domain in {"anonymous.com", "protonmail.com", "mail.ru"}:
+        score += 0.20
+    if str(user_input.get("DeviceType", "")).lower() == "mobile" and amt > 500:
+        score += 0.08
+    return float(min(score, 0.85))
+
+
+def _validate(user_input: dict) -> dict:
     errors = []
 
-    amt = user_input.get("TransactionAmt", None)
+    amt = user_input.get("TransactionAmt")
     if amt is None:
         errors.append("TransactionAmt is required")
-    elif amt < 0:
-        errors.append("TransactionAmt cannot be negative")
-    elif amt > 100000:
-        errors.append("TransactionAmt seems too large (>100,000)")
+    else:
+        # ✅ FIX: تحقق إن القيمة رقم
+        try:
+            amt = float(amt)
+            if amt < 0:
+                errors.append("TransactionAmt cannot be negative")
+        except (ValueError, TypeError):
+            errors.append("TransactionAmt must be numeric")
 
-    hour = user_input.get("hour", None)
-    if hour is not None:
-        if not (0 <= hour <= 23):
-            errors.append("hour must be between 0 and 23")
+    card4 = user_input.get("card4")
+    if card4 and str(card4).lower() not in VALID_CARD4:
+        errors.append(f"card4 must be one of {VALID_CARD4}")
 
-    valid_cards = ["visa", "mastercard", "american express", "discover"]
-    card4 = user_input.get("card4", None)
-    if card4 and card4.lower() not in valid_cards:
-        errors.append(f"card4 must be one of {valid_cards}")
+    card6 = user_input.get("card6")
+    if card6 and str(card6).lower() not in VALID_CARD6:
+        errors.append(f"card6 must be one of {VALID_CARD6}")
 
-    valid_card6 = ["credit", "debit"]
-    card6 = user_input.get("card6", None)
-    if card6 and card6.lower() not in valid_card6:
-        errors.append(f"card6 must be one of {valid_card6}")
-
-    valid_devices = ["mobile", "desktop"]
-    device = user_input.get("DeviceType", None)
-    if device and device.lower() not in valid_devices:
-        errors.append(f"DeviceType must be one of {valid_devices}")
+    device = user_input.get("DeviceType")
+    if device and str(device).lower() not in VALID_DEVICE:
+        errors.append(f"DeviceType must be one of {VALID_DEVICE}")
 
     if errors:
         raise ValueError(" | ".join(errors))
-
     return user_input
 
-
 # ================================================================
-# Risk Level
+# predict_light — Manual Form → Light Models Only
 # ================================================================
-def get_risk_level(score, threshold):
-    """Map a fraud score to a risk category."""
-    if score > 0.7:
-        return {
-            "level":  "HIGH RISK",
-            "emoji":  "🚨",
-            "action": "Block transaction immediately",
-            "color":  "red"
-        }
-    elif score >= threshold:
-        return {
-            "level":  "MEDIUM RISK",
-            "emoji":  "⚠️",
-            "action": "Review required",
-            "color":  "orange"
-        }
-    else:
-        return {
-            "level":  "LOW RISK",
-            "emoji":  "✅",
-            "action": "Transaction approved",
-            "color":  "green"
-        }
-
-
-# ================================================================
-# Explainability
-# ================================================================
-def get_top_factors(user_input, score):
-    """Generate human-readable risk factors from visible inputs."""
-    factors = []
-
-    if user_input.get("TransactionAmt", 0) > 1000:
-        factors.append("💰 High transaction amount")
-
-    hour = user_input.get("hour", 12)
-    if isinstance(hour, (int, float)) and hour < 6:
-        factors.append("🌙 Unusual time (late night)")
-
-    if user_input.get("DeviceType", "") == "mobile":
-        factors.append("📱 Mobile device (higher risk)")
-
-    if user_input.get("card4", "") == "discover":
-        factors.append("💳 Discover card (highest fraud rate)")
-
-    if user_input.get("P_emaildomain", "") in [
-        "anonymous.com", "guerrillamail.com"
-    ]:
-        factors.append("📧 Suspicious email domain")
-
-    if user_input.get("dist1", 0) > 500:
-        factors.append("📍 Large distance from usual location")
-
-    if score > 0.7:
-        factors.append("🤖 All models flagged as suspicious")
-
-    if not factors:
-        factors.append("✅ No major risk factors detected")
-
-    return factors
-
-
-# ================================================================
-# Internal Helpers
-# ================================================================
-def _active_threshold(default_threshold, threshold_override=None):
-    """Resolve the active threshold, clamped to [0.01, 0.99]."""
-    if threshold_override is None:
-        threshold = default_threshold
-    else:
-        threshold = threshold_override
-    try:
-        threshold = float(threshold)
-    except (TypeError, ValueError):
-        threshold = default_threshold
-    return min(max(float(threshold), 0.01), 0.99)
-
-
-def _finalize_prediction(user_input, score, threshold, model_scores):
-    """Build the standard prediction response dict."""
-    risk     = get_risk_level(score, threshold)
-    is_fraud = score >= threshold
-    factors  = get_top_factors(user_input, score)
-
-    return {
-        "timestamp":        datetime.now().isoformat(),
-        "risk_score":       round(float(score), 4),
-        "fraud_probability": round(float(score), 4),
-        "risk_level":       risk["level"],
-        "risk_emoji":       risk["emoji"],
-        "risk_action":      risk["action"],
-        "risk_color":       risk["color"],
-        "decision":         "FRAUD" if is_fraud else "SAFE",
-        "is_fraud":         bool(is_fraud),
-        **model_scores,
-        "top_factors":      factors,
-        "threshold":        round(float(threshold), 3),
-    }
-
-
-# ================================================================
-# Light Prediction — Manual Dashboard
-# ================================================================
-def predict_light(user_input,
-                  threshold_override=None,
-                  debug=False):
+def predict_light(user_input: dict,
+                  threshold_override: Optional[float] = None) -> dict:
     """
-    Real-time prediction for manual dashboard transactions.
-
-    Uses xgb_light (60%) + lgbm_light (40%) on manual dashboard features.
-    Isolation Forest is NOT used here (trained on all_features,
-    not manual features).
+    Real-time: Manual form → xgb_light + lgbm_light ONLY
     """
     try:
-        user_input = validate_input(user_input)
+        if not MODELS.get("loaded"):
+            return {"error": f"Models not loaded: {MODELS.get('error')}"}
 
-        (_, _, _, xgb_l, lgbm_l,
-         stored_threshold, manual_feats, _) = MODELS
-        threshold = _active_threshold(stored_threshold, threshold_override)
+        _validate(user_input)
+        threshold = _get_light_threshold(threshold_override)
 
-        # Pipeline: raw → features → preprocess → align to manual features
         df = pd.DataFrame([user_input])
+
+        # اشتق is_morning و is_night من hour مباشرة
+        # عشان build_features بيحتاج TransactionDT لاشتقاقهم
+        # ولو مش موجود هيديهم 0، فبنحسبهم هنا صح
+        if "hour" in df.columns and pd.notna(df["hour"].iloc[0]):
+            h = int(df["hour"].iloc[0])
+            df["is_morning"] = int(6 <= h < 12)
+            df["is_night"]   = int(h < 6)
+
+        # build_features بدون TransactionDT — هيشتغل على الـ features الموجودة
         df = build_features(df)
         df = preprocess_inference(df)
-        df = df.reindex(columns=manual_feats, fill_value=0)
+        df = apply_aggregation_features(df)
 
-        # Score from light models only
-        p1 = xgb_l.predict_proba(df)[:, 1][0]
-        p2 = lgbm_l.predict_proba(df)[:, 1][0]
-        score = 0.60 * p1 + 0.40 * p2
+        # ✅ FIX 6: reindex بـ manual_features كاملة بالترتيب الصح
+        manual_features = MODELS["manual_features"]
+        X_light = df.reindex(columns=manual_features)
+        X_light = X_light.fillna(value=_training_fill_values(manual_features))
 
-        return _finalize_prediction(
-            user_input, score, threshold,
-            {
-                "xgb_l_score":    round(float(p1), 4),
-                "lgbm_l_score":   round(float(p2), 4),
-                "inference_mode": "light",
-            },
-        )
+        w = LIGHT_ENSEMBLE_WEIGHTS
+        p1 = float(MODELS["xgb_light"].predict_proba(X_light)[0, 1])
+        p2 = float(MODELS["lgbm_light"].predict_proba(X_light)[0, 1])
+        ml_score = w["xgb"] * p1 + w["lgbm"] * p2
+        heuristic = _heuristic_risk(user_input)
+        score = float(min(0.99, 0.92 * ml_score + 0.08 * heuristic))
+        risk     = _risk_level(score, threshold)
+        is_fraud = score >= threshold
 
+        return {
+            "timestamp":      datetime.now().isoformat(),
+            "risk_score":     round(score, 4),
+            "fraud_probability": round(score, 4),
+            "ml_score":       round(ml_score, 4),
+            "heuristic_risk": round(heuristic, 4),
+            "is_fraud":       bool(is_fraud),
+            "decision":       "FRAUD" if is_fraud else "SAFE",
+            "risk_level":     risk["level"],
+            "risk_emoji":     risk["emoji"],
+            "risk_action":    risk["action"],
+            "risk_color":     risk["color"],
+            "xgb_l_score":    round(p1, 4),
+            "lgbm_l_score":   round(p2, 4),
+            "threshold":      round(threshold, 3),
+            "inference_mode": "light",
+        }
     except ValueError as e:
-        return {"error": f"Validation Error: {str(e)}"}
+        return {"error": f"Validation: {e}"}
     except Exception as e:
-        return {"error": f"Prediction Error: {str(e)}"}
-
-
-# ================================================================
-# Backward-Compatible Aliases
-# ================================================================
-predict          = predict_light
-predict_realtime = predict_light
-
+        return {"error": f"Prediction: {e}"}
 
 # ================================================================
-# Batch Prediction — Heavy Ensemble
+# predict_batch — CSV Upload → Heavy Models Only
 # ================================================================
-def predict_batch_heavy(df, threshold_override=None):
+def predict_batch(df: pd.DataFrame,
+                  threshold_override: Optional[float] = None) -> pd.DataFrame:
     """
-    Batch inference on uploaded CSV data.
-
-    Uses xgb_heavy (45%) + lgbm_heavy (35%) + iso_forest normalized (20%).
-    iso_score is also injected as a feature since heavy models were
-    trained with it.
+    Batch: CSV upload → xgb_heavy + lgbm_heavy + iso_forest ONLY
     """
+    if not MODELS.get("loaded"):
+        raise RuntimeError(f"Models not loaded: {MODELS.get('error')}")
     if df is None or df.empty:
-        raise ValueError("No transaction rows are available for batch inference")
+        raise ValueError("Empty DataFrame")
     if "TransactionAmt" not in df.columns:
-        raise ValueError("Uploaded data must include TransactionAmt")
+        raise ValueError("Missing TransactionAmt column")
 
-    (xgb, lgbm, iso, _, _,
-     stored_threshold, _, all_feats) = MODELS
-    threshold = _active_threshold(stored_threshold, threshold_override)
+    threshold = _get_threshold(threshold_override)
+    original  = df.copy()
 
-    original_df = df.copy()
-
-    # Pipeline: raw → features → preprocess → align to all_features
+    # Pipeline
     X = build_features(df.copy())
     X = preprocess_inference(X)
-    X = X.reindex(columns=all_feats, fill_value=0)
+    X = apply_aggregation_features(X)
 
-    # Isolation Forest anomaly score
-    iso_features = [c for c in getattr(iso, "feature_names_in_", [])
-                    if c in X.columns]
-    if iso_features:
-        iso_raw = iso.decision_function(X[iso_features])
+    # ISO score — compute BEFORE reindexing to prevent stale zeros
+    iso      = MODELS["iso"]
+    iso_cols = [
+        c for c in getattr(iso, "feature_names_in_", [])
+        if c != "iso_score"
+    ]
+    if iso_cols:
+        X_iso = X.reindex(columns=iso_cols)
+        X_iso = X_iso.fillna(value=_training_fill_values(iso_cols))
+        iso_score = iso.decision_function(X_iso)
     else:
-        iso_raw = np.zeros(len(X))
+        iso_score = np.zeros(len(X))
 
-    # Heavy models expect iso_score as a feature
-    X["iso_score"] = iso_raw
+    # Reindex to training schema and inject fresh iso_score
+    X = X.reindex(columns=MODELS["all_feats"])
+    X = X.fillna(value=_training_fill_values(MODELS["all_feats"]))
+    if "iso_score" in X.columns:
+        X["iso_score"] = iso_score
+    else:
+        X.insert(len(X.columns), "iso_score", iso_score)
 
-    # Model predictions
-    p1 = xgb.predict_proba(X)[:, 1]
-    p2 = lgbm.predict_proba(X)[:, 1]
+    # Heavy predictions — X is now in the exact training column order
+    p1 = MODELS["xgb_heavy"].predict_proba(X)[:, 1]
+    p2 = MODELS["lgbm_heavy"].predict_proba(X)[:, 1]
 
-    # Normalize iso: more negative = more anomalous → higher fraud prob
-    iso_norm = 1.0 / (1.0 + np.exp(iso_raw))
+    # Normalize iso_score to [0, 1]
+    iso_min, iso_max = iso_score.min(), iso_score.max()
+    if len(iso_score) < 2 or abs(float(iso_max - iso_min)) < 1e-8:
+        iso_norm = np.full(len(iso_score), 0.5)
+    else:
+        iso_norm = (iso_score - iso_min) / (iso_max - iso_min)
+    iso_fraud = 1.0 - iso_norm  # lower iso score = more anomalous
 
-    # Ensemble
-    score = 0.45 * p1 + 0.35 * p2 + 0.20 * iso_norm
+    w = HEAVY_ENSEMBLE_WEIGHTS
+    final = w["xgb"] * p1 + w["lgbm"] * p2 + w["iso"] * iso_fraud
 
-    # Enrich original DataFrame
-    original_df["risk_score"]       = np.round(score.astype(float), 4)
-    original_df["fraud_probability"] = original_df["risk_score"]
-    original_df["prediction"]       = (score >= threshold).astype(int)
-    original_df["is_fraud"]         = original_df["prediction"]
-    original_df["xgb_score"]        = np.round(p1.astype(float), 4)
-    original_df["lgbm_score"]       = np.round(p2.astype(float), 4)
-    original_df["iso_score"]        = np.round(iso_raw.astype(float), 6)
-    original_df["threshold"]        = round(float(threshold), 3)
-    original_df["inference_mode"]   = "heavy_ensemble"
+    original["risk_score"]     = np.round(final, 4)
+    original["fraud_probability"] = np.round(final, 4)
+    original["prediction"]     = (final >= threshold).astype(int)
+    original["is_fraud"]       = original["prediction"]
+    original["xgb_score"]      = np.round(p1, 4)
+    original["lgbm_score"]     = np.round(p2, 4)
+    original["iso_score"]      = np.round(iso_score, 4)
+    original["threshold"]      = round(threshold, 3)
+    original["inference_mode"] = "heavy_ensemble"
 
-    if "isFraud" not in original_df.columns:
-        original_df["isFraud"] = original_df["prediction"]
-
-    if "hour" not in original_df.columns and "TransactionDT" in original_df.columns:
-        original_df["hour"] = (
-            (original_df["TransactionDT"].fillna(0).astype(int) // 3600) % 24
-        ).astype(int)
-    if "day_of_week" not in original_df.columns and "TransactionDT" in original_df.columns:
-        original_df["day_of_week"] = (
-            (original_df["TransactionDT"].fillna(0).astype(int) // 86400) % 7
-        ).astype(int)
-
-    return original_df
+    return original
 
 
-# Alias
-predict_batch = predict_batch_heavy
-
-
-# ================================================================
-# Feature Preparation Helper (used by test_pipeline.py)
-# ================================================================
-def build_features_inference(df, all_features=None):
-    """Build and align inference features for external callers."""
-    df = df.copy()
-    df = build_features(df)
-    df = preprocess_inference(df)
-    if all_features is not None:
-        df = df.reindex(columns=all_features, fill_value=0)
-    return df
+def predict(user_input: dict,
+            threshold_override: Optional[float] = None) -> dict:
+    """API-compatible alias for real-time light inference."""
+    return predict_light(user_input, threshold_override=threshold_override)
 
 
 # ================================================================
-# Run
+# Run Tests
 # ================================================================
 if __name__ == "__main__":
+    import json
 
-    # Test 1 - Suspicious
     suspicious = {
-        "TransactionAmt": 5000,
-        "ProductCD":      "W",
-        "card4":          "discover",
-        "card6":          "credit",
-        "P_emaildomain":  "anonymous.com",
-        "DeviceType":     "mobile",
-        "dist1":          800,
-        "hour":           3,
+        "TransactionAmt": 5000, "card4": "discover",
+        "card6": "credit",      "P_emaildomain": "anonymous.com",
+        "DeviceType": "mobile", "dist1": 800, "hour": 3,
     }
-
-    # Test 2 - Normal
     normal = {
-        "TransactionAmt": 50,
-        "ProductCD":      "W",
-        "card4":          "visa",
-        "card6":          "debit",
-        "P_emaildomain":  "gmail.com",
-        "DeviceType":     "desktop",
-        "dist1":          10,
-        "hour":           14,
+        "TransactionAmt": 50,   "card4": "visa",
+        "card6": "debit",       "P_emaildomain": "gmail.com",
+        "DeviceType": "desktop","dist1": 10,  "hour": 14,
     }
 
-    # Test 3 - Invalid input
-    invalid = {
-        "TransactionAmt": -100,
-        "hour":           25,
-    }
+    print("\n=== TEST 1 — Suspicious ===")
+    print(json.dumps(predict_light(suspicious), indent=2))
 
-    print("\n" + "="*50)
-    print("TEST 1 — Suspicious Transaction")
-    print("="*50)
-    result1 = predict_light(suspicious)
-    for k, v in result1.items():
-        print(f"  {k:20}: {v}")
+    print("\n=== TEST 2 — Normal ===")
+    print(json.dumps(predict_light(normal), indent=2))
 
-    print("\n" + "="*50)
-    print("TEST 2 — Normal Transaction")
-    print("="*50)
-    result2 = predict_light(normal)
-    for k, v in result2.items():
-        print(f"  {k:20}: {v}")
-
-    print("\n" + "="*50)
-    print("TEST 3 — Invalid Input")
-    print("="*50)
-    result3 = predict_light(invalid)
-    print(f"  {result3}")
+    print("\n=== TEST 3 — Batch ===")
+    batch = pd.DataFrame([suspicious, normal])
+    result = predict_batch(batch)
+    print(result[["risk_score", "prediction", "inference_mode"]])

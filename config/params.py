@@ -66,3 +66,7 @@ SMOTE_PARAMS = {
     "random_state":      42,
     "n_jobs":            -1,
 }
+
+# Ensemble weights (must match models/predict.py)
+HEAVY_ENSEMBLE_WEIGHTS = {"xgb": 0.45, "lgbm": 0.35, "iso": 0.20}
+LIGHT_ENSEMBLE_WEIGHTS = {"xgb": 0.60, "lgbm": 0.40}

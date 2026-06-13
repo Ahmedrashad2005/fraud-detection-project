@@ -15,17 +15,19 @@ from sklearn.metrics import (
 )
 
 from config.paths import (
-    HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR
+    HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR, REFERENCE_STATS,
+    LIGHT_THRESHOLD
 )
 from config.params import (
     XGB_HEAVY_PARAMS, XGB_LIGHT_PARAMS,
     LGBM_HEAVY_PARAMS, LGBM_LIGHT_PARAMS,
-    ISO_PARAMS
+    ISO_PARAMS, LIGHT_ENSEMBLE_WEIGHTS
 )
 from config.settings import TEST_SIZE, RANDOM_STATE
 from data.load_data import load_raw_data
 from features.preprocess import preprocess_train, preprocess_inference
 from features.build_features import build_features
+from features.aggregation import fit_aggregation_features, save_aggregation_artifact
 
 TARGET = "isFraud"
 
@@ -87,35 +89,8 @@ def add_aggregation_features(X_train, X_val, X_test):
     print("AGGREGATION FEATURES")
     print("="*50)
 
-    agg_configs = [
-        ('card1',         'TransactionAmt', ['mean', 'std', 'count']),
-        ('card2',         'TransactionAmt', ['mean', 'count']),
-        ('P_emaildomain', 'TransactionAmt', ['mean', 'count']),
-        ('DeviceType',    'TransactionAmt', ['mean', 'count']),
-    ]
-
-    for group_col, value_col, aggs in agg_configs:
-        if group_col not in X_train.columns:
-            continue
-        if value_col not in X_train.columns:
-            continue
-
-        for agg in aggs:
-            col_name = f"{group_col}_{value_col}_{agg}"
-            agg_map  = X_train.groupby(group_col)[value_col].agg(agg)
-
-            X_train[col_name] = X_train[group_col].map(agg_map).fillna(0)
-            X_val[col_name]   = X_val[group_col].map(agg_map).fillna(0)
-            X_test[col_name]  = X_test[group_col].map(agg_map).fillna(0)
-            print(f"  ✅ {col_name}")
-
-    if 'card1_TransactionAmt_mean' in X_train.columns:
-        for df_ in [X_train, X_val, X_test]:
-            df_['amt_vs_card1_mean'] = (
-                df_['TransactionAmt'] /
-                (df_['card1_TransactionAmt_mean'] + 1)
-            )
-        print("  ✅ amt_vs_card1_mean")
+    X_train, X_val, X_test, artifact = fit_aggregation_features(X_train, X_val, X_test)
+    save_aggregation_artifact(artifact)
 
     print(f"\n✅ Train : {X_train.shape}")
     print(f"✅ Val   : {X_val.shape}")
@@ -145,6 +120,11 @@ def find_best_threshold(y_true, probs, beta=0.5):
     precision, recall, thresholds = precision_recall_curve(
         y_true, probs
     )
+    if len(thresholds) == 0:
+        return 0.5
+
+    precision = precision[:-1]
+    recall = recall[:-1]
     f_beta = ((1 + beta**2) * precision * recall) / \
              (beta**2 * precision + recall + 1e-6)
 
@@ -163,7 +143,7 @@ def find_best_threshold(y_true, probs, beta=0.5):
 # 6. Evaluation
 # ================================================================
 def evaluate(probs, y, threshold, name="Model"):
-    preds = (probs > threshold).astype(int)
+    preds = (probs >= threshold).astype(int)
 
     print(f"\n{'='*50}")
     print(f"📊 {name}")
@@ -289,11 +269,25 @@ def get_manual_feature_columns(X_train):
 
         "email_missing",
 
+        "is_suspicious_domain",
+
+        "domain_length",
+
 
 
         # ProductCD
 
         "ProductCD",
+
+        # Risk signals
+
+        "amt_x_distance",
+
+        "geo_amount_risk",
+
+        "night_x_high_amount",
+
+        "amt_hour_risk",
 
     ]
 
@@ -354,7 +348,7 @@ def ensemble_predict(xgb, lgbm, xgb_l, lgbm_l, X, light_features):
 # 10. Save Artifacts
 # ================================================================
 def save_all(models, all_features, light_features,
-             X_train, threshold):
+             X_train, threshold, light_threshold):
     print("\n" + "="*50)
     print("SAVING ARTIFACTS")
     print("="*50)
@@ -381,9 +375,31 @@ def save_all(models, all_features, light_features,
     joblib.dump(all_features,   PREPROCESS_DIR / "all_features.pkl")
     joblib.dump(light_features, PREPROCESS_DIR / "manual_features.pkl")
     joblib.dump(threshold,      PREPROCESS_DIR / "threshold.pkl")
+    joblib.dump(light_threshold, LIGHT_THRESHOLD)
+    print(f"✅ threshold.pkl       (ensemble): {threshold:.3f}")
+    print(f"✅ light_threshold.pkl (light):    {light_threshold:.3f}")
 
     medians = X_train.median().to_dict()
     joblib.dump(medians, PREPROCESS_DIR / "feature_medians.pkl")
+
+    drift_cols = [
+        c for c in [
+            "TransactionAmt", "amount_log", "dist1", "dist1_log",
+            "hour", "is_night", "is_high_amount", "is_mobile",
+        ]
+        if c in X_train.columns
+    ]
+    reference_stats = {}
+    for col in drift_cols:
+        series = X_train[col].dropna()
+        reference_stats[col] = {
+            "mean": float(series.mean()),
+            "std": float(series.std() or 1e-6),
+            "p25": float(series.quantile(0.25)),
+            "p75": float(series.quantile(0.75)),
+        }
+    joblib.dump(reference_stats, REFERENCE_STATS)
+    print("✅ reference_stats → preprocessing/")
     print("✅ artifacts      → preprocessing/")
 
 
@@ -429,14 +445,25 @@ def main():
         X_train, y_train, X_val, y_val
     )
 
-    # 8. Threshold on Val
+    # 8. Threshold on Val — Full Ensemble
     print("\n" + "="*50)
-    print("THRESHOLD TUNING ON VAL SET")
+    print("THRESHOLD TUNING ON VAL SET (FULL ENSEMBLE)")
     print("="*50)
     val_probs = ensemble_predict(
         xgb, lgbm, xgb_l, lgbm_l, X_val, light_features
     )
     threshold = find_best_threshold(y_val, val_probs, beta=0.5)
+
+    # 8b. Threshold on Val — Light-Only (calibrated for real-time)
+    w = LIGHT_ENSEMBLE_WEIGHTS
+    light_val_probs = (
+        w["xgb"] * xgb_l.predict_proba(X_val[light_features])[:, 1] +
+        w["lgbm"] * lgbm_l.predict_proba(X_val[light_features])[:, 1]
+    )
+    print("\n" + "="*50)
+    print("THRESHOLD TUNING ON VAL SET (LIGHT ONLY)")
+    print("="*50)
+    light_threshold = find_best_threshold(y_val, light_val_probs, beta=0.5)
 
     # 9. Final Evaluation on Test
     print("\n" + "="*50)
@@ -452,10 +479,10 @@ def main():
     print("LIGHT-ONLY EVALUATION (Manual Features)")
     print("="*50)
     light_test_probs = (
-        0.60 * xgb_l.predict_proba(X_test[light_features])[:, 1] +
-        0.40 * lgbm_l.predict_proba(X_test[light_features])[:, 1]
+        w["xgb"] * xgb_l.predict_proba(X_test[light_features])[:, 1] +
+        w["lgbm"] * lgbm_l.predict_proba(X_test[light_features])[:, 1]
     )
-    evaluate(light_test_probs, y_test, threshold, "LIGHT MANUAL")
+    evaluate(light_test_probs, y_test, light_threshold, "LIGHT MANUAL")
 
     # 10. Save
     save_all(
@@ -467,7 +494,8 @@ def main():
         X_train.columns.tolist(),
         light_features,
         X_train,
-        threshold
+        threshold,
+        light_threshold,
     )
 
     print("\n🎉 TRAINING COMPLETE!")

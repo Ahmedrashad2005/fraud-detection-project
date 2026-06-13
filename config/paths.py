@@ -36,6 +36,10 @@ FEATURE_COLUMNS = PREPROCESS_DIR / "feature_columns.pkl"
 FEATURE_MEDIANS = PREPROCESS_DIR / "feature_medians.pkl"
 MEDIANS         = PREPROCESS_DIR / "medians.pkl"
 THRESHOLD       = PREPROCESS_DIR / "threshold.pkl"
+LIGHT_THRESHOLD = PREPROCESS_DIR / "light_threshold.pkl"
+MANUAL_FEATURES = PREPROCESS_DIR / "manual_features.pkl"
+REFERENCE_STATS = PREPROCESS_DIR / "reference_stats.pkl"
+AGGREGATION_MAPS = PREPROCESS_DIR / "aggregation_maps.pkl"
 
 # Auto-create dirs
 for path in [RAW_DIR, PROCESSED_DIR,

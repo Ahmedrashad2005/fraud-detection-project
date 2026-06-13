@@ -11,24 +11,24 @@ from dashboard.styles.theme import COLORS
 # Live Operational Status Banner
 # ================================================================
 def render_status_banner():
-    """Render the top live operational status banner."""
-    st.markdown(f"""
+    """Render institutional operations status ribbon."""
+    st.markdown("""
     <div class="status-banner">
         <div class="status-item">
             <span class="status-dot green"></span>
-            <span>Core Risk Scoring Active</span>
+            <span>Real-Time Authorization Engine</span>
         </div>
         <div class="status-item">
             <span class="status-dot green"></span>
-            <span>Transaction Ledger Sync Healthy</span>
+            <span>SWIFT / Card Network Gateway</span>
         </div>
         <div class="status-item">
             <span class="status-dot green"></span>
-            <span>Latency: &lt;50ms</span>
+            <span>End-to-End Encryption Active</span>
         </div>
         <div class="status-item">
             <span class="status-dot orange"></span>
-            <span>Model Governance Watch Enabled</span>
+            <span>Regulatory Reporting Queue · Normal</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -146,31 +146,15 @@ def render_risk_factors(factors: list):
 
 
 # ================================================================
-# Mock Mode Warning
-# ================================================================
-def render_mock_warning():
-    """Display a warning that the system is running in mock/demo mode."""
-    st.markdown(f"""
-    <div class="alert-box alert-warning" style="margin-bottom: 16px;">
-        ⚠️ <strong>Mock Operational Mode:</strong> Model artifacts not fully loaded.
-        Dashboard is displaying simulated data for demonstration purposes.
-        Deploy trained models to <code>artifacts/</code> for live inference.
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ================================================================
 # Footer
 # ================================================================
 def render_footer():
-    """Render the bottom footer."""
+    """Render institutional footer."""
     st.markdown(f"""
     <div class="footer">
-        <div class="footer-text">
-            FraudGuard AI — Enterprise Credit Card Fraud Detection System
-        </div>
+        <div class="footer-text">FraudGuard Institutional Risk Platform</div>
         <div class="footer-engine">
-            Enterprise AI Risk Intelligence  ·  © 2026 All Rights Reserved
+            Confidential · Internal Use Only · © 2026 FraudGuard Banking Systems
         </div>
     </div>
     """, unsafe_allow_html=True)

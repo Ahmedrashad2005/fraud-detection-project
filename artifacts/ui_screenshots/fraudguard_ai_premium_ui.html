@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FraudGuard AI Premium UI</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --surface: #1E1E1E;
+      --surface-2: #181818;
+      --border: rgba(255, 255, 255, 0.1);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --text: #FFFFFF;
+      --muted: #BDC3C7;
+      --dim: #7F8C8D;
+      --green: #2ECC71;
+      --red: #E74C3C;
+      --orange: #F39C12;
+      --shadow: rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        radial-gradient(circle at 68% 18%, rgba(46, 204, 113, 0.09), transparent 28%),
+        radial-gradient(circle at 88% 72%, rgba(231, 76, 60, 0.08), transparent 22%),
+        #121212;
+      background-size: 40px 40px, 40px 40px, auto, auto, auto;
+    }
+
+    .app {
+      width: 1920px;
+      height: 1200px;
+      display: grid;
+      grid-template-columns: 342px 1fr;
+      padding: 28px;
+      gap: 24px;
+    }
+
+    .sidebar,
+    .panel {
+      background: linear-gradient(180deg, rgba(30, 30, 30, 0.96), rgba(24, 24, 24, 0.96));
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 70px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    }
+
+    .sidebar {
+      border-radius: 8px;
+      padding: 26px 22px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .shield {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      color: var(--green);
+      background: rgba(46, 204, 113, 0.12);
+      border: 1px solid rgba(46, 204, 113, 0.58);
+      border-radius: 8px;
+      box-shadow: 0 0 28px rgba(46, 204, 113, 0.28);
+    }
+
+    .shield svg {
+      width: 28px;
+      height: 28px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .brand-title {
+      font-size: 25px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.8px;
+    }
+
+    .profile-card {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 13px;
+      align-items: center;
+      margin: 22px 0 26px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .avatar {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(46, 204, 113, 0.9), rgba(46, 204, 113, 0.18)),
+        #202020;
+      border: 1px solid rgba(46, 204, 113, 0.42);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .avatar::before {
+      content: "";
+      position: absolute;
+      top: 10px;
+      left: 18px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .avatar::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      bottom: 7px;
+      width: 30px;
+      height: 19px;
+      border-radius: 18px 18px 5px 5px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .profile-name {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    .profile-meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .nav-label,
+    .status-label {
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.8px;
+      margin: 4px 0 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 9px;
+    }
+
+    .nav-item {
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      color: var(--muted);
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-icon {
+      width: 20px;
+      text-align: center;
+      color: var(--text);
+    }
+
+    .nav-item.active {
+      color: var(--text);
+      background: rgba(46, 204, 113, 0.075);
+      border-color: rgba(46, 204, 113, 0.24);
+      box-shadow: inset 4px 0 0 var(--green), 0 0 20px rgba(46, 204, 113, 0.08);
+    }
+
+    .status-box {
+      margin-top: auto;
+      padding: 17px;
+      background: rgba(255, 255, 255, 0.026);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: inset 0 0 35px rgba(46, 204, 113, 0.025);
+    }
+
+    .status-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .status-title strong {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .online-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 14px rgba(46, 204, 113, 0.78);
+    }
+
+    .model-list {
+      display: grid;
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .model-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .model-online {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: 1fr 330px;
+      gap: 24px;
+      min-width: 0;
+    }
+
+    .panel {
+      border-radius: 8px;
+      padding: 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(46, 204, 113, 0.05), transparent 35%, rgba(231, 76, 60, 0.035));
+    }
+
+    .panel-content {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+    }
+
+    .section-title {
+      margin: 0 0 22px;
+      color: var(--text);
+      font-size: 24px;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .top-grid {
+      height: calc(100% - 54px);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 520px;
+      gap: 26px;
+      min-height: 0;
+    }
+
+    .subpanel {
+      background: rgba(18, 18, 18, 0.45);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      min-width: 0;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .input,
+    .select {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      color: var(--text);
+      background: #151515;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      font-size: 17px;
+      font-weight: 700;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    }
+
+    .select::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: rotate(45deg) translateY(-3px);
+    }
+
+    .analyze {
+      width: 76%;
+      height: 58px;
+      margin: 28px auto 16px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #35d97d, var(--green));
+      color: #07140d;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      box-shadow: 0 0 28px rgba(46, 204, 113, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    }
+
+    .approved {
+      min-height: 74px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      border: 1px solid rgba(46, 204, 113, 0.72);
+      background: linear-gradient(135deg, rgba(46, 204, 113, 0.18), rgba(46, 204, 113, 0.055));
+      color: var(--green);
+      font-size: 20px;
+      font-weight: 900;
+      box-shadow: 0 0 32px rgba(46, 204, 113, 0.16);
+    }
+
+    .gauge-panel {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      justify-items: center;
+      align-items: center;
+      padding: 28px 22px 26px;
+    }
+
+    .gauge-title {
+      width: 100%;
+      margin: 0;
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 850;
+    }
+
+    .gauge-wrap {
+      width: 390px;
+      height: 390px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 0 32px rgba(231, 76, 60, 0.26));
+    }
+
+    .gauge {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, #191919 0 54%, transparent 55%),
+        conic-gradient(var(--red) 0deg 262.08deg, rgba(255, 255, 255, 0.085) 262.08deg 360deg);
+      border: 1px solid rgba(231, 76, 60, 0.45);
+      box-shadow:
+        inset 0 0 42px rgba(231, 76, 60, 0.16),
+        0 0 58px rgba(231, 76, 60, 0.18);
+    }
+
+    .gauge::before {
+      content: "";
+      position: absolute;
+      inset: 30px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .gauge-value {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+
+    .gauge-value strong {
+      color: var(--red);
+      font-size: 76px;
+      line-height: 1;
+      font-weight: 900;
+      text-shadow: 0 0 28px rgba(231, 76, 60, 0.54);
+    }
+
+    .gauge-value span {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2.1px;
+    }
+
+    .admin-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 22px;
+    }
+
+    .admin-title {
+      margin: 0;
+      color: var(--text);
+      font-size: 23px;
+      font-weight: 850;
+    }
+
+    .tools {
+      display: flex;
+      gap: 10px;
+    }
+
+    .tool-button {
+      width: 50px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--border);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .tool-button svg {
+      width: 21px;
+      height: 21px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .slider-area {
+      padding: 18px 8px 0;
+    }
+
+    .slider {
+      position: relative;
+      height: 14px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--green), var(--orange) 62%, var(--red));
+      box-shadow: 0 0 26px rgba(243, 156, 18, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.6);
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      inset: -9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .thumb {
+      position: absolute;
+      top: 50%;
+      left: 75%;
+      width: 34px;
+      height: 34px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: var(--text);
+      border: 5px solid var(--orange);
+      box-shadow: 0 0 28px rgba(243, 156, 18, 0.44), 0 8px 22px rgba(0, 0, 0, 0.38);
+    }
+
+    .threshold-copy {
+      margin: 30px 0 18px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+      font-weight: 650;
+    }
+
+    .threshold-copy strong {
+      color: var(--text);
+    }
+
+    .sensitivity {
+      height: 42px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #151515;
+    }
+
+    .seg {
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .seg.low {
+      background: linear-gradient(90deg, rgba(46, 204, 113, 0.86), rgba(46, 204, 113, 0.5));
+    }
+
+    .seg.mid {
+      background: linear-gradient(90deg, rgba(243, 156, 18, 0.5), rgba(243, 156, 18, 0.88));
+    }
+
+    .seg.high {
+      background: linear-gradient(90deg, rgba(231, 76, 60, 0.62), rgba(231, 76, 60, 0.94));
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="FraudGuard AI Enterprise Fraud Detection System">
+    <aside class="sidebar">
+      <section class="brand" aria-label="Brand">
+        <div class="shield" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"></path>
+            <path d="M9 12l2 2 4-5"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">FraudGuard AI</div>
+          <div class="brand-subtitle">Enterprise Detection</div>
+        </div>
+      </section>
+
+      <section class="profile-card" aria-label="Profile">
+        <div class="avatar" aria-hidden="true"></div>
+        <div>
+          <div class="profile-name">Ahmed Abu Al-Asri | Level 3 AI | Damietta University</div>
+          <div class="profile-meta">Authorized AI operations profile</div>
+        </div>
+      </section>
+
+      <div class="nav-label">Navigation</div>
+      <nav class="nav" aria-label="Primary navigation">
+        <div class="nav-item active"><span class="nav-icon">🔍</span><span>Real-time Verification &amp; Control</span></div>
+        <div class="nav-item"><span class="nav-icon">📊</span><span>Executive Batch Dashboard</span></div>
+      </nav>
+
+      <section class="status-box" aria-label="System status">
+        <div class="status-label">System Status</div>
+        <div class="status-title"><span class="online-dot"></span><strong>System Status: 🟢 Optimal Performance</strong></div>
+        <div class="model-list">
+          <div class="model-row"><span>XGB Heavy</span><span class="model-online">● Online</span></div>
+          <div class="model-row"><span>LGBM Heavy</span><span class="model-online">● Online</span></div>
+          <div class="model-row"><span>Iso Forest</span><span class="model-online">● Online</span></div>
+          <div class="model-row"><span>XGB Light</span><span class="model-online">● Online</span></div>
+          <div class="model-row"><span>LGBM Light</span><span class="model-online">● Online</span></div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="main">
+      <section class="panel" aria-label="Real-time Manual Verification">
+        <div class="panel-content">
+          <h1 class="section-title">Real-time Manual Verification</h1>
+          <div class="top-grid">
+            <section class="subpanel" aria-label="Transaction parameters input form">
+              <div class="form-grid">
+                <div class="field">
+                  <label>Amount ($)</label>
+                  <div class="input">35.00</div>
+                </div>
+                <div class="field">
+                  <label>Transaction Time (DT)</label>
+                  <div class="input">86400</div>
+                </div>
+                <div class="field">
+                  <label>Card Brand</label>
+                  <div class="select">Mastercard</div>
+                </div>
+                <div class="field">
+                  <label>Card Class</label>
+                  <div class="select">Credit</div>
+                </div>
+                <div class="field">
+                  <label>Device Type</label>
+                  <div class="select">Mobile</div>
+                </div>
+                <div class="field">
+                  <label>Email Domain</label>
+                  <div class="input">gmail.com</div>
+                </div>
+              </div>
+              <div class="analyze">Analyze Transaction</div>
+              <div class="approved">✅ APPROVED - Safe Transaction (Risk: 12.4%)</div>
+            </section>
+
+            <section class="subpanel gauge-panel" aria-label="Visual risk gauge">
+              <h2 class="gauge-title">Real-time Risk Gauge</h2>
+              <div class="gauge-wrap">
+                <div class="gauge"></div>
+                <div class="gauge-value">
+                  <strong>72.8%</strong>
+                  <span>High-Risk Signal</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Admin Control Panel">
+        <div class="panel-content">
+          <div class="admin-head">
+            <h2 class="admin-title">Global Threshold &amp; Risk Sensitivity</h2>
+            <div class="tools" aria-label="Utility actions">
+              <div class="tool-button" title="Load CSV" aria-label="Load CSV">
+                <svg viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <path d="M14 2v6h6"></path>
+                  <path d="M12 18v-6"></path>
+                  <path d="M9 15l3 3 3-3"></path>
+                </svg>
+              </div>
+              <div class="tool-button" title="Settings" aria-label="Settings">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.25.31.45.66.6 1h.09a2 2 0 0 1 0 4H20a1.7 1.7 0 0 0-.6 1z"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="slider-area">
+            <div class="slider" aria-label="Classification boundary slider set to 0.75">
+              <div class="thumb"></div>
+            </div>
+            <p class="threshold-copy">
+              <strong>Current Threshold: 0.75</strong> | Status: Balanced Risk Mode. Recommended for maximizing bank asset protection over high false positives.
+            </p>
+            <div class="sensitivity" aria-label="Risk sensitivity scale">
+              <div class="seg low">Low Recall / High Precision</div>
+              <div class="seg mid">Balanced Boundary</div>
+              <div class="seg high">High Recall / Low Precision</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

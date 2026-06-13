@@ -31,32 +31,32 @@ def render_kpi_row(total_transactions: int, fraud_count: int,
 
     with col1:
         st.markdown(render_metric_card(
-            label="Model Accuracy",
+            label="Model Discrimination (AUC)",
             value=f"{auc_score * 100:.1f}%",
-            sub="Evaluation AUC proxy",
-            color="#D8DEE3",
-            icon="▦",
+            sub="Held-out test ensemble",
+            color="#E8EDF2",
+            icon="◈",
             tone="ledger",
         ), unsafe_allow_html=True)
 
     with col2:
-        rate_color = COLORS['crimson'] if fraud_rate > 5 else "#D6A94A"
+        rate_color = COLORS['crimson'] if fraud_rate > 5 else COLORS['gold']
         st.markdown(render_metric_card(
-            label="Fraud Rejection Rate",
+            label="Decline Rate",
             value=f"{fraud_rate:.2f}%",
-            sub=f"{fraud_count:,} blocked transactions",
+            sub=f"{fraud_count:,} transactions declined",
             color=rate_color,
-            icon="!",
+            icon="⚑",
             tone="risk",
         ), unsafe_allow_html=True)
 
     with col3:
         st.markdown(render_metric_card(
-            label="Audited Transactions",
+            label="Portfolio Volume",
             value=f"{total_transactions:,}",
-            sub="Rows screened in current batch",
-            color="#D6A94A",
-            icon="◇",
+            sub="Transactions in screening batch",
+            color="#C5A572",
+            icon="▤",
             tone="review",
         ), unsafe_allow_html=True)
 
@@ -69,10 +69,10 @@ def render_kpi_row(total_transactions: int, fraud_count: int,
             amt_str = f"${protected_amount:,.0f}"
 
         st.markdown(render_metric_card(
-            label="Financial Assets Protected",
+            label="Exposure Mitigated",
             value=amt_str,
-            sub="Blocked fraud value",
-            color="#38B46B",
+            sub="Declined fraudulent volume",
+            color="#2D8A62",
             icon="◆",
             tone="safe",
         ), unsafe_allow_html=True)

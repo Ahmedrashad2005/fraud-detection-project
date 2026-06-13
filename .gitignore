@@ -1,15 +1,32 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Data (large)
 data/raw/*.csv
+data/raw/*.zip
 *.zip
-venv/
-__pycache__/
-*.pyc
-venv/
-__pycache__/
-artifacts/
-**/__pycache__/
-*.pkl
-*.png
-artifacts/
-**/__pycache__/
-*.pkl
-venv/
+
+# Artifacts (optional — remove line if you version models)
+# artifacts/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Logs / DB
+*.log
+artifacts/*.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Stray generated files
+artifacts/preprocessing/gemini-*.py

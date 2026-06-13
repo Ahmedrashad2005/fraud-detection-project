@@ -158,7 +158,7 @@ def render_artifact_status(status: Mapping[str, bool]) -> None:
         "iso_forest",
         "xgb_light",
         "lgbm_light",
-        "top35_features",
+        "manual_features",
         "all_features",
         "encoders",
         "medians",
