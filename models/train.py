@@ -21,7 +21,7 @@ from config.paths import (
 from config.params import (
     XGB_HEAVY_PARAMS, XGB_LIGHT_PARAMS,
     LGBM_HEAVY_PARAMS, LGBM_LIGHT_PARAMS,
-    ISO_PARAMS, LIGHT_ENSEMBLE_WEIGHTS
+    ISO_PARAMS, LIGHT_ENSEMBLE_WEIGHTS, FULL_ENSEMBLE_WEIGHTS
 )
 from config.settings import TEST_SIZE, RANDOM_STATE
 from data.load_data import load_raw_data
@@ -341,7 +341,7 @@ def ensemble_predict(xgb, lgbm, xgb_l, lgbm_l, X, light_features):
     p3 = xgb_l.predict_proba(X[light_features])[:, 1]
     p4 = lgbm_l.predict_proba(X[light_features])[:, 1]
 
-    return 0.40*p1 + 0.30*p2 + 0.20*p3 + 0.10*p4
+    return FULL_ENSEMBLE_WEIGHTS["xgb_h"]*p1 + FULL_ENSEMBLE_WEIGHTS["lgbm_h"]*p2 + FULL_ENSEMBLE_WEIGHTS["xgb_l"]*p3 + FULL_ENSEMBLE_WEIGHTS["lgbm_l"]*p4
 
 
 # ================================================================

@@ -18,6 +18,7 @@ from sklearn.metrics import (
 from config.paths import (
     HEAVY_DIR, LIGHT_DIR, PREPROCESS_DIR, ARTIFACTS_DIR
 )
+from config.params import FULL_ENSEMBLE_WEIGHTS
 from features.aggregation import apply_aggregation_features
 
 PLOTS_DIR = ARTIFACTS_DIR / "plots"
@@ -50,11 +51,12 @@ def load_artifacts():
 # ================================================================
 def ensemble_predict(xgb, lgbm, xgb_light, lgbm_light,
                      X_heavy, X_light):
+    w = FULL_ENSEMBLE_WEIGHTS
     p1 = xgb.predict_proba(X_heavy)[:, 1]
     p2 = lgbm.predict_proba(X_heavy)[:, 1]
     p3 = xgb_light.predict_proba(X_light)[:, 1]
     p4 = lgbm_light.predict_proba(X_light)[:, 1]
-    return 0.40*p1 + 0.30*p2 + 0.20*p3 + 0.10*p4
+    return w["xgb_h"]*p1 + w["lgbm_h"]*p2 + w["xgb_l"]*p3 + w["lgbm_l"]*p4
 
 
 # ================================================================

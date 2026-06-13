@@ -142,35 +142,6 @@ def predict_batch_transactions(df: pd.DataFrame,
     return LoadResult(True, result, f"Scored {len(result):,} transactions.")
 
 
-def load_model_artifacts() -> dict[str, Any]:
-    """Compatibility wrapper exposing models already loaded via Dictionary mapping."""
-    backend = get_inference_backend()
-    if not backend.ok or backend.models is None:
-        return {}
-    
-    m = backend.models
-    return {
-        "xgb_heavy":  m.get("xgb_heavy"),
-        "lgbm_heavy": m.get("lgbm_heavy"),
-        "iso_forest": m.get("iso"),
-        "xgb_light":  m.get("xgb_light"),
-        "lgbm_light": m.get("lgbm_light"),
-    }
-
-
-def load_preprocessing_artifacts() -> dict[str, Any]:
-    """Compatibility wrapper for preprocessing assets exposed by models.predict keys."""
-    backend = get_inference_backend()
-    if not backend.ok or backend.models is None:
-        return {}
-    
-    m = backend.models
-    return {
-        "threshold":       m.get("threshold", DEFAULT_THRESHOLD),
-        "manual_features": m.get("manual_features"),
-        "all_features":    m.get("all_feats"),
-    }
-
 
 @st.cache_data(show_spinner=False)
 def load_evaluation_report() -> list[dict[str, Any]]:
@@ -186,7 +157,11 @@ def load_evaluation_report() -> list[dict[str, Any]]:
 
 
 def load_threshold(default: float = DEFAULT_THRESHOLD) -> float:
-    value = load_preprocessing_artifacts().get("threshold", default)
+    backend = get_inference_backend()
+    if backend.ok and backend.models:
+        value = backend.models.get("threshold", default)
+    else:
+        value = default
     threshold = _coerce_float(value, default)
     return min(max(threshold, 0.01), 0.99)
 

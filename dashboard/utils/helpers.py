@@ -3,8 +3,13 @@
 Utility helpers for the dashboard.
 """
 
+import json
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
+
+from config.paths import ARTIFACTS_DIR
 
 
 def format_currency(value: float) -> str:
@@ -50,18 +55,20 @@ def get_threshold_description(threshold: float) -> str:
         )
 
 
-def safe_read_uploaded_file(uploaded_file) -> pd.DataFrame:
-    """Safely read an uploaded CSV or Excel file."""
+def _load_ensemble_auc() -> float:
+    """Load the ensemble AUC from the evaluation report, with a safe fallback."""
+    report_path = ARTIFACTS_DIR / "evaluation_report.json"
     try:
-        name = uploaded_file.name.lower()
-        if name.endswith(".csv"):
-            return pd.read_csv(uploaded_file)
-        elif name.endswith((".xlsx", ".xls")):
-            return pd.read_excel(uploaded_file)
-        else:
-            return None
+        if report_path.exists():
+            with report_path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if isinstance(payload, list):
+                for entry in payload:
+                    if entry.get("model") == "Ensemble":
+                        return float(entry.get("auc", 0.0))
     except Exception:
-        return None
+        pass
+    return 0.0
 
 
 def compute_batch_stats(df: pd.DataFrame) -> dict:
@@ -86,8 +93,8 @@ def compute_batch_stats(df: pd.DataFrame) -> dict:
     else:
         protected = 0.0
 
-    # AUC from evaluation report
-    auc = 0.897
+    # AUC from evaluation report (not hardcoded)
+    auc = _load_ensemble_auc()
 
     return {
         "total":     total,

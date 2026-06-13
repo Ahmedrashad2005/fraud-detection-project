@@ -6,27 +6,45 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 *.egg-info/
+dist/
+build/
 
 # Data (large)
 data/raw/*.csv
 data/raw/*.zip
+data/processed/*.csv
 *.zip
 
-# Artifacts (optional — remove line if you version models)
-# artifacts/
+# Model artifacts (large binaries — remove to version models)
+artifacts/models/**/*.pkl
+artifacts/preprocessing/*.pkl
+
+# Database
+artifacts/*.db
 
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
 *.swp
+Thumbs.db
 
-# Logs / DB
+# Logs
 *.log
-artifacts/*.db
+artifacts/logs/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Stray generated files
-artifacts/preprocessing/gemini-*.py
+# Stray files — never track these
+artifacts/preprocessing/*.rar
+artifacts/preprocessing/*.docx*
+artifacts/preprocessing/*.png
+artifacts/preprocessing/.~lock.*
+*.rar
+
+# Deprecated scripts (to be deleted)
+verify_refactor.py
+investigate_vectors.py
+diagnostic.py
+verify_features.py

@@ -3,31 +3,19 @@
 # ============================================================
 
 APP_NAME     = "Fraud Detection System"
-VERSION      = "1.0.0"
+VERSION      = "1.1.0"
 RANDOM_STATE = 42
 TEST_SIZE    = 0.2
-
-
-# ============================================================
-# MODEL WEIGHTS (for ensemble)
-# ============================================================
-
-MODEL_WEIGHTS = {
-    "xgb": 0.5,
-    "lgbm": 0.4,
-    "iso": 0.1
-}
 
 
 # ============================================================
 # THRESHOLDS
 # ============================================================
 
-# Main prediction threshold (binary decision)
-PREDICTION_THRESHOLD = 0.5
-
-# Optional: review layer (bank-style decision)
-REVIEW_THRESHOLD = 0.6
+# Note: The actual prediction threshold is loaded from
+# artifacts/preprocessing/threshold.pkl (calibrated on validation set).
+# These are fallback defaults only.
+DEFAULT_THRESHOLD = 0.75
 
 # Risk levels (for UI / business logic)
 RISK_THRESHOLDS = {
