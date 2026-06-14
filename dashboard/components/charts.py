@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.styles.theme import COLORS, PLOTLY_LAYOUT
+from features.build_features import REF_DATE
 
 BANK = {
     "panel": "#0F2847",
@@ -22,6 +23,17 @@ BANK = {
     "blue": "#5B8DEF",
     "muted": "#6B7F94",
 }
+
+
+def _render_chart_empty(title: str, body: str) -> None:
+    st.markdown(f"""
+    <div class="bk-chart-empty">
+        <div>
+            <strong>{title}</strong>
+            <span>{body}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def _bank_layout(height: int):
@@ -76,21 +88,21 @@ def render_fraud_by_card_brand(df: pd.DataFrame):
     )
 
     fraud_col = _fraud_column(df)
-    if "card4" in df.columns and fraud_col:
-        brand_stats = (
-            df.groupby("card4")[fraud_col]
-            .mean()
-            .sort_values(ascending=True)
-            .reset_index()
+    if df is None or "card4" not in df.columns or not fraud_col:
+        _render_chart_empty(
+            "Card brand analysis unavailable",
+            "Upload data with card4 and prediction columns to populate this view.",
         )
-        brand_stats.columns = ["Card Brand", "Fraud Rate"]
-        brand_stats["Fraud Rate %"] = (brand_stats["Fraud Rate"] * 100).round(2)
-    else:
-        brand_stats = pd.DataFrame({
-            "Card Brand":   ["Visa", "Mastercard", "Amex", "Discover"],
-            "Fraud Rate":   [0.018, 0.031, 0.052, 0.078],
-            "Fraud Rate %": [1.8, 3.1, 5.2, 7.8],
-        })
+        return
+
+    brand_stats = (
+        df.groupby("card4")[fraud_col]
+        .mean()
+        .sort_values(ascending=True)
+        .reset_index()
+    )
+    brand_stats.columns = ["Card Brand", "Fraud Rate"]
+    brand_stats["Fraud Rate %"] = (brand_stats["Fraud Rate"] * 100).round(2)
 
     # Color mapping
     colors = []
@@ -121,11 +133,12 @@ def render_fraud_by_card_brand(df: pd.DataFrame):
 
     # Highlight max risk brand
     max_brand = brand_stats.loc[brand_stats["Fraud Rate %"].idxmax(), "Card Brand"]
-    st.markdown(f"""
-    <div class="bank-alert bank-alert-risk">
-        <strong>{max_brand}</strong> brand is highly targeted. Review automated processing rules.
-    </div>
-    """, unsafe_allow_html=True)
+    if brand_stats["Fraud Rate %"].max() >= 5:
+        st.markdown(f"""
+        <div class="bank-alert bank-alert-risk">
+            <strong>{max_brand}</strong> is the highest-risk card network in this batch.
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ================================================================
@@ -139,17 +152,22 @@ def render_device_distribution(df: pd.DataFrame):
     )
 
     fraud_col = _fraud_column(df)
-    if "DeviceType" in df.columns and fraud_col:
-        fraud_df = df[df[fraud_col] == 1]
-        device_counts = fraud_df["DeviceType"].value_counts().reset_index()
-        device_counts.columns = ["Device", "Count"]
-        if device_counts.empty:
-            device_counts = pd.DataFrame({"Device": ["No blocked fraud"], "Count": [1]})
-    else:
-        device_counts = pd.DataFrame({
-            "Device": ["Mobile", "Desktop", "Tablet"],
-            "Count":  [62, 31, 7],
-        })
+    if df is None or "DeviceType" not in df.columns or not fraud_col:
+        _render_chart_empty(
+            "Channel distribution unavailable",
+            "Upload data with DeviceType and prediction columns to populate this view.",
+        )
+        return
+
+    fraud_df = df[df[fraud_col] == 1]
+    device_counts = fraud_df["DeviceType"].value_counts().reset_index()
+    device_counts.columns = ["Device", "Count"]
+    if device_counts.empty:
+        _render_chart_empty(
+            "No declined transactions in this batch",
+            "Channel distribution appears after at least one transaction is flagged.",
+        )
+        return
 
     color_map = {
         "mobile":  BANK["red"],
@@ -190,11 +208,16 @@ def render_device_distribution(df: pd.DataFrame):
 
     st.plotly_chart(fig, use_container_width=True, key="device_dist")
 
-    st.markdown(f"""
-    <div class="bank-alert bank-alert-review">
-        Device mismatch alert: verified mobile spoofing pattern on id_30 / id_31.
-    </div>
-    """, unsafe_allow_html=True)
+    mobile_count = int(device_counts.loc[
+        device_counts["Device"].astype(str).str.lower() == "mobile", "Count"
+    ].sum())
+    total_count = int(device_counts["Count"].sum())
+    if total_count and mobile_count / total_count >= 0.6:
+        st.markdown("""
+        <div class="bank-alert bank-alert-review">
+            Mobile channel concentration is elevated in the declined queue.
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ================================================================
@@ -210,15 +233,42 @@ def render_temporal_heatmap(df: pd.DataFrame = None):
     days_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     fraud_col = _fraud_column(df)
-    if (df is not None and "hour" in df.columns
-            and "day_of_week" in df.columns and fraud_col):
-        fraud_df = df[df[fraud_col] == 1]
-        pivot = fraud_df.groupby(["day_of_week", "hour"]).size().unstack(fill_value=0)
-        # Ensure all hours and days
-        pivot = pivot.reindex(index=range(7), columns=range(24), fill_value=0)
-        z_data = pivot.values
+    if df is not None and fraud_col and (
+        ("hour" not in df.columns or "day_of_week" not in df.columns)
+        and "TransactionDT" in df.columns
+    ):
+        df = df.copy()
+        tx_seconds = pd.to_numeric(df["TransactionDT"], errors="coerce")
+        dt = pd.to_datetime(REF_DATE) + pd.to_timedelta(tx_seconds, unit="s")
+        df["hour"] = dt.dt.hour
+        df["day_of_week"] = dt.dt.dayofweek
+
+    if not (df is not None and "hour" in df.columns and "day_of_week" in df.columns and fraud_col):
+        _render_chart_empty(
+            "Temporal heatmap unavailable",
+            "Upload data with TransactionDT or hour and day_of_week fields to populate this view.",
+        )
+        return
+
+    fraud_df = df[df[fraud_col] == 1]
+    if fraud_df.empty and "risk_score" in df.columns:
+        pivot = (
+            df.groupby(["day_of_week", "hour"])["risk_score"]
+            .mean()
+            .mul(100)
+            .round(1)
+            .unstack(fill_value=0)
+        )
+        colorbar_title = "Avg Risk"
+        hover_text = "Day: %{y}<br>Hour: %{x}:00<br>Avg Risk: %{z:.1f}%<extra></extra>"
     else:
-        z_data = [[0 for _ in range(24)] for _ in range(7)]
+        pivot = fraud_df.groupby(["day_of_week", "hour"]).size().unstack(fill_value=0)
+        colorbar_title = "Count"
+        hover_text = "Day: %{y}<br>Hour: %{x}:00<br>Fraud Count: %{z}<extra></extra>"
+
+    # Ensure all hours and days
+    pivot = pivot.reindex(index=range(7), columns=range(24), fill_value=0)
+    z_data = pivot.values
 
     fig = go.Figure(go.Heatmap(
         z=z_data,
@@ -230,9 +280,9 @@ def render_temporal_heatmap(df: pd.DataFrame = None):
             [0.68, BANK["gold"]],
             [1.0,  BANK["red"]],
         ],
-        hovertemplate="Day: %{y}<br>Hour: %{x}:00<br>Fraud Count: %{z}<extra></extra>",
+        hovertemplate=hover_text,
         colorbar=dict(
-            title=dict(text="Count", font=dict(size=10)),
+            title=dict(text=colorbar_title, font=dict(size=10)),
             tickfont=dict(size=9),
             len=0.8,
         ),

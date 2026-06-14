@@ -13,7 +13,15 @@ if __name__ == "__main__":
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     raise SystemExit(
         subprocess.call(
-            [sys.executable, "-m", "streamlit", "run", str(ROOT / "dashboard" / "app.py")],
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                str(ROOT / "dashboard" / "app.py"),
+                "--server.maxUploadSize",
+                "1024",
+            ],
             cwd=ROOT,
             env=env,
         )

@@ -4,10 +4,8 @@ Utility helpers for the dashboard.
 """
 
 import json
-from pathlib import Path
 
 import pandas as pd
-import numpy as np
 
 from config.paths import ARTIFACTS_DIR
 
@@ -31,27 +29,19 @@ def get_threshold_description(threshold: float) -> str:
     """Return a human-readable description for a given threshold value."""
     if threshold >= 0.85:
         return (
-            f"Current Threshold: {threshold:.2f} | "
-            f"Status: High Precision Mode (Precision: ~90%, Recall: ~40%). "
-            f"Minimizes false positives — best for low-volume, high-value transactions."
+            f"{threshold:.2f} · High precision mode. Fewer false positives, more missed fraud."
         )
     elif threshold >= 0.65:
         return (
-            f"Current Threshold: {threshold:.2f} | "
-            f"Status: Balanced Risk (Precision: ~75%, Recall: ~60%). "
-            f"Recommended for maximizing bank asset protection over high false positives."
+            f"{threshold:.2f} · Balanced policy. Good default for production review queues."
         )
     elif threshold >= 0.45:
         return (
-            f"Current Threshold: {threshold:.2f} | "
-            f"Status: Moderate Sensitivity (Precision: ~55%, Recall: ~75%). "
-            f"Catches more fraud but increases manual review volume."
+            f"{threshold:.2f} · Higher sensitivity. More fraud captured, more manual review."
         )
     else:
         return (
-            f"Current Threshold: {threshold:.2f} | "
-            f"Status: High Recall Mode (Precision: ~35%, Recall: ~90%). "
-            f"Maximum fraud detection — expect significant false positive overhead."
+            f"{threshold:.2f} · High recall mode. Expect significant false-positive volume."
         )
 
 

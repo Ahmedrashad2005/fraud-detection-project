@@ -1,0 +1,4 @@
+[server]
+# Streamlit expects this value in megabytes.
+maxUploadSize = 1024
+

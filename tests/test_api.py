@@ -6,27 +6,24 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.main import app
+from app.main import TransactionInput, home, predict_transaction
 from models.predict import MODELS
-
-client = TestClient(app)
 
 
 def test_home():
-    r = client.get("/")
-    assert r.status_code == 200
-    assert "FraudGuard" in r.json()["message"]
+    body = home()
+    assert "FraudGuard" in body["message"]
+    assert "models_loaded" in body
 
 
 @pytest.mark.skipif(not MODELS.get("loaded"), reason="models not loaded")
 def test_predict_endpoint():
-    payload = {
+    payload = TransactionInput(**{
         "TransactionAmt": 50,
         "card4": "visa",
         "card6": "debit",
@@ -34,8 +31,6 @@ def test_predict_endpoint():
         "DeviceType": "desktop",
         "dist1": 0,
         "hour": 12,
-    }
-    r = client.post("/predict", json=payload)
-    assert r.status_code == 200
-    body = r.json()
+    })
+    body = predict_transaction(payload)
     assert "risk_score" in body

@@ -41,6 +41,20 @@ def _ensure_schema() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS review_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                transaction_id TEXT NOT NULL,
+                previous_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                reason TEXT,
+                analyst TEXT NOT NULL,
+                risk_score REAL
+            )
+            """
+        )
         conn.commit()
     _DB_READY = True
 
@@ -88,3 +102,76 @@ def fetch_recent_predictions(limit: int = 50) -> list[dict[str, Any]]:
             (max(1, int(limit)),),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def log_review_action(
+    transaction_id: str,
+    previous_status: str,
+    new_status: str,
+    reason: str = "",
+    analyst: str = "A. Hassan",
+    risk_score: float | None = None,
+) -> None:
+    """Persist a human review decision for operational traceability."""
+    try:
+        _ensure_schema()
+        with sqlite3.connect(_db_path()) as conn:
+            conn.execute(
+                """
+                INSERT INTO review_actions
+                (created_at, transaction_id, previous_status, new_status, reason, analyst, risk_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    str(transaction_id),
+                    str(previous_status),
+                    str(new_status),
+                    str(reason or ""),
+                    str(analyst or "A. Hassan"),
+                    None if risk_score is None else float(risk_score),
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("Review audit log write failed: %s", exc)
+
+
+def fetch_review_actions(transaction_id: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    """Fetch analyst review actions, newest first."""
+    _ensure_schema()
+    with sqlite3.connect(_db_path()) as conn:
+        conn.row_factory = sqlite3.Row
+        if transaction_id:
+            rows = conn.execute(
+                """
+                SELECT created_at, transaction_id, previous_status, new_status, reason, analyst, risk_score
+                FROM review_actions
+                WHERE transaction_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (str(transaction_id), max(1, int(limit))),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT created_at, transaction_id, previous_status, new_status, reason, analyst, risk_score
+                FROM review_actions
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (max(1, int(limit)),),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def fetch_latest_review_statuses(limit: int = 5000) -> dict[str, str]:
+    """Return the latest human review status per transaction."""
+    actions = fetch_review_actions(limit=limit)
+    statuses: dict[str, str] = {}
+    for action in actions:
+        transaction_id = str(action.get("transaction_id", ""))
+        if transaction_id and transaction_id not in statuses:
+            statuses[transaction_id] = str(action.get("new_status", "Pending"))
+    return statuses

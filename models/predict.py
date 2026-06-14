@@ -281,31 +281,3 @@ def predict(user_input: dict,
     """API-compatible alias for real-time light inference."""
     return predict_light(user_input, threshold_override=threshold_override)
 
-
-# ================================================================
-# Run Tests
-# ================================================================
-if __name__ == "__main__":
-    import json
-
-    suspicious = {
-        "TransactionAmt": 5000, "card4": "discover",
-        "card6": "credit",      "P_emaildomain": "anonymous.com",
-        "DeviceType": "mobile", "dist1": 800, "hour": 3,
-    }
-    normal = {
-        "TransactionAmt": 50,   "card4": "visa",
-        "card6": "debit",       "P_emaildomain": "gmail.com",
-        "DeviceType": "desktop","dist1": 10,  "hour": 14,
-    }
-
-    print("\n=== TEST 1 — Suspicious ===")
-    print(json.dumps(predict_light(suspicious), indent=2))
-
-    print("\n=== TEST 2 — Normal ===")
-    print(json.dumps(predict_light(normal), indent=2))
-
-    print("\n=== TEST 3 — Batch ===")
-    batch = pd.DataFrame([suspicious, normal])
-    result = predict_batch(batch)
-    print(result[["risk_score", "prediction", "inference_mode"]])

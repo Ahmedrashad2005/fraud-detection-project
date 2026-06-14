@@ -104,14 +104,14 @@ def add_card_features(df: pd.DataFrame) -> pd.DataFrame:
         df['is_visa']         = df['card4'].isin(['visa', 1, 1.0, 0, 0.0]).astype(int)
         df['is_mastercard']   = df['card4'].isin(['mastercard', 2, 2.0]).astype(int)
 
-        print(f"  card4 sample    : {df['card4'].unique()[:5].tolist()}")
+        print(f"  card4 preview   : {df['card4'].unique()[:5].tolist()}")
         print(f"  is_discover sum : {df['is_discover'].sum()}")
 
     if 'card6' in df.columns:
         df['is_credit'] = df['card6'].isin(['credit', 1, 1.0]).astype(int)
         df['is_debit']  = df['card6'].isin(['debit', 2, 2.0]).astype(int)
 
-        print(f"  card6 sample    : {df['card6'].unique()[:5].tolist()}")
+        print(f"  card6 preview   : {df['card6'].unique()[:5].tolist()}")
         print(f"  is_credit sum   : {df['is_credit'].sum()}")
 
     print("✅ Card features built")
@@ -129,7 +129,7 @@ def add_device_features(df: pd.DataFrame) -> pd.DataFrame:
     df['is_desktop']        = df['DeviceType'].isin(['desktop', 2, 2.0]).astype(int)
     df['device_missing']    = df['DeviceType'].isin(['Unknown', None, np.nan, 0, 0.0]).astype(int)
 
-    print(f"  DeviceType sample : {df['DeviceType'].unique()[:5].tolist()}")
+    print(f"  DeviceType preview: {df['DeviceType'].unique()[:5].tolist()}")
     print(f"  is_mobile sum     : {df['is_mobile'].sum()}")
 
     print("✅ Device features built")
